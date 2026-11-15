@@ -97,8 +97,13 @@ export function HostControls({
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="glass absolute left-1/2 top-5 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-ink/80 p-1.5"
-            style={{ marginLeft: offset }}
+            className="absolute left-1/2 top-4 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full p-1.5"
+            style={{
+              marginLeft: offset,
+              // Solid (not glass) so the TV's header text never shows through the controls.
+              background: "linear-gradient(180deg, #161c22, #0b0f14)",
+              boxShadow: "0 0 0 1px rgba(245,196,81,.22), 0 18px 50px -10px rgba(0,0,0,.9), 0 0 0 10px rgba(6,8,11,.85)",
+            }}
           >
             {!started ? (
               <DockBtn onClick={() => cmd({ c: "start" })} primary>
