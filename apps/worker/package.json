@@ -1,0 +1,21 @@
+{
+  "name": "@21/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc -p tsconfig.json",
+    "migrate": "node scripts/migrate.mjs"
+  },
+  "dependencies": {
+    "@21/engine": "0.1.0",
+    "@21/protocol": "0.1.0",
+    "@neondatabase/serverless": "^1.2.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261115.1",
+    "wrangler": "^4.162.0"
+  }
+}

@@ -9,3 +9,4 @@ test-results/
 playwright-report/
 screenshots/
 .plan-attestation
+dev-*.log
