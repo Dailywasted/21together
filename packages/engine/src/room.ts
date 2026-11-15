@@ -166,7 +166,7 @@ export class RoomError extends Error {
   }
 }
 
-const AVATARS = ["🦊", "🐼", "🐯", "🦁", "🐸", "🐙", "🦄", "🐲", "🦉", "🐺", "🐻", "🐵", "🦈", "🐧", "🦩", "🐝"];
+export const AVATARS = ["🦊", "🐼", "🐯", "🦁", "🐸", "🐙", "🦄", "🐲", "🦉", "🐺", "🐻", "🐵", "🦈", "🐧", "🦩", "🐝"];
 
 export function sanitizeName(name: string): string {
   const cleaned = Array.from(name.replace(/[\u0000-\u001f\u007f<>]/g, "").trim()).slice(0, 16).join("");
