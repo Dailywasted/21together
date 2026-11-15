@@ -39,6 +39,7 @@ export const ClientMsg = z.discriminatedUnion("t", [
             maxSeats: z.number(),
             betSeconds: z.number(),
             decisionSeconds: z.number(),
+            manual: z.boolean(),
           })
           .partial(),
       }),

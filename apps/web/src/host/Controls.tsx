@@ -6,10 +6,32 @@ import { Avatar } from "../components/ui";
 import { useT, useLang, fmt, type TKey } from "../lib/i18n";
 import { setSoundEnabled, soundEnabled } from "../lib/sound";
 import { LangToggle } from "../components/LangToggle";
+import type { HostView } from "./HostPage";
 
 type Modal = null | "players" | "settings" | "end";
 
-export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: HostCmd) => void }) {
+/** What the host's "Next" does right now (step-by-step mode). */
+export function nextLabel(snap: PublicSnapshot): TKey {
+  switch (snap.phase) {
+    case "betting": return "next_betting";
+    case "deciding": return "next_deciding";
+    case "dealer": return snap.dealer[1] === null ? "next_hole" : "next_dealer";
+    case "payout": return "next_payout";
+    default: return "next";
+  }
+}
+
+export function HostControls({
+  snap,
+  cmd,
+  view,
+  setView,
+}: {
+  snap: PublicSnapshot;
+  cmd: (c: HostCmd) => void;
+  view: HostView;
+  setView: (v: HostView) => void;
+}) {
   const t = useT();
   const [visible, setVisible] = useState(true);
   const [modal, setModal] = useState<Modal>(null);
@@ -22,18 +44,32 @@ export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: Hos
     hideTimer.current = setTimeout(() => setVisible(false), 4000);
   };
 
+  // Show the dock briefly when the page opens; after that only on mouse / keyboard activity.
   useEffect(() => {
     poke();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const onMove = () => poke();
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement)?.tagName === "INPUT") return;
+      if (e.repeat) return;
       const k = e.key.toLowerCase();
       if (k === "h") setVisible((v) => !v);
       else if (k === " ") {
         e.preventDefault();
         if (snap.phase === "lobby" || snap.phase === "ended") cmd({ c: "start" });
-        else cmd({ c: snap.paused ? "resume" : "pause" });
-      } else if (k === "n") cmd({ c: "skip" });
+        else if (snap.rules.manual && !snap.paused) {
+          cmd({ c: "skip" });
+          return; // stepping through the round keeps the screen clean
+        } else cmd({ c: snap.paused ? "resume" : "pause" });
+      } else if (k === "n" || k === "arrowright" || k === "pagedown") {
+        e.preventDefault();
+        cmd({ c: "skip" });
+        return;
+      } else if (k === "m") cmd({ c: "rules", rules: { manual: !snap.rules.manual } });
+      else if (k === "v") setView(view === "arena" ? "table" : "arena");
       else if (k === "p") setModal("players");
       else if (k === "s") setModal("settings");
       else if (k === "f") toggleFullscreen();
@@ -48,9 +84,11 @@ export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: Hos
       window.removeEventListener("keydown", onKey);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap.phase, snap.paused]);
+  }, [snap.phase, snap.paused, snap.rules.manual, view]);
 
   const started = snap.phase !== "lobby" && snap.phase !== "ended";
+  const manual = snap.rules.manual;
+  const offset = view === "table" ? -160 : 0;
   return (
     <>
       <AnimatePresence>
@@ -59,8 +97,8 @@ export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: Hos
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -20, opacity: 0 }}
-            className="glass absolute left-1/2 top-5 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full p-1.5"
-            style={{ marginLeft: -160 }}
+            className="glass absolute left-1/2 top-5 z-40 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-ink/80 p-1.5"
+            style={{ marginLeft: offset }}
           >
             {!started ? (
               <DockBtn onClick={() => cmd({ c: "start" })} primary>
@@ -73,7 +111,25 @@ export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: Hos
             ) : (
               <DockBtn onClick={() => cmd({ c: "pause" })}>⏸ {t("pause")}</DockBtn>
             )}
-            {started && <DockBtn onClick={() => cmd({ c: "skip" })}>⏭ {t("skip")}</DockBtn>}
+            {started && (
+              <DockBtn onClick={() => cmd({ c: "skip" })} primary={manual && snap.awaitingHost && !snap.paused}>
+                ⏭ {manual ? t(nextLabel(snap)) : t("skip")}
+              </DockBtn>
+            )}
+            <div className="mx-1 flex rounded-full bg-white/[.06] p-0.5" title={t("pacingHint")}>
+              {[false, true].map((m) => (
+                <button
+                  key={String(m)}
+                  onClick={() => m !== manual && cmd({ c: "rules", rules: { manual: m } })}
+                  className={`btn-press whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold ${m === manual ? "bg-white text-ink" : "text-white/60 hover:text-white"}`}
+                >
+                  {m ? t("pacingStep") : t("pacingAuto")}
+                </button>
+              ))}
+            </div>
+            <DockBtn onClick={() => setView(view === "arena" ? "table" : "arena")}>
+              🖥 {view === "arena" ? t("viewTable") : t("viewArena")}
+            </DockBtn>
             <DockBtn onClick={() => setModal("players")}>👥 {t("players")}</DockBtn>
             <DockBtn onClick={() => setModal("settings")}>⚙ {t("settings")}</DockBtn>
             <DockBtn
@@ -95,8 +151,13 @@ export function HostControls({ snap, cmd }: { snap: PublicSnapshot; cmd: (c: Hos
         )}
       </AnimatePresence>
       {!visible && !modal && (
-        <div className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 text-xs text-white/20" style={{ marginLeft: -160 }}>
-          {t("hostHelp")}
+        <div className="pointer-events-none absolute bottom-[3px] right-8 z-10 flex items-center gap-2 text-xs font-semibold text-white/30">
+          {manual && started && snap.awaitingHost && !snap.paused ? (
+            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-white/70">
+              ␣ / → · {t(nextLabel(snap))}
+            </span>
+          ) : null}
+          <span>{t("keysHint")}</span>
         </div>
       )}
 
@@ -252,6 +313,18 @@ function SettingsPanel({ rules, onSave }: { rules: Rules; onSave: (r: Partial<Ru
             type="checkbox"
             checked={draft.dealerHitsSoft17}
             onChange={(e) => setDraft({ ...draft, dealerHitsSoft17: e.target.checked })}
+            className="h-6 w-6 accent-[#f5c451]"
+          />
+        </label>
+        <label className="flex items-center justify-between rounded-2xl bg-white/5 p-3">
+          <span className="flex flex-col">
+            <span className="text-sm font-bold">{t("pacingStep")}</span>
+            <span className="text-xs text-white/45">{t("pacingHint")}</span>
+          </span>
+          <input
+            type="checkbox"
+            checked={!!draft.manual}
+            onChange={(e) => setDraft({ ...draft, manual: e.target.checked })}
             className="h-6 w-6 accent-[#f5c451]"
           />
         </label>

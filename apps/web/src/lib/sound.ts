@@ -123,6 +123,106 @@ export const sfx = {
   pop() {
     tone(900, 0.08, { type: "sine", gain: 0.15, slide: 1.6 });
   },
+  /** Snare-like roll that speeds up and swells (hole card / big reveals). */
+  drumroll(dur = 0.9, delay = 0) {
+    let t = 0;
+    let gap = 0.07;
+    while (t < dur) {
+      const k = t / dur;
+      noise(0.05, { delay: delay + t, freq: 1800, q: 0.6, gain: 0.12 + k * 0.28 });
+      t += gap;
+      gap = Math.max(0.028, gap * 0.93);
+    }
+  },
+  /** Crash cymbal + low hit for the moment a card turns. */
+  reveal(delay = 0) {
+    noise(0.9, { delay, freq: 7000, q: 0.3, gain: 0.22 });
+    tone(110, 0.25, { delay, type: "sine", gain: 0.35, slide: 0.5 });
+  },
+  whoosh(delay = 0) {
+    const c = ac();
+    if (!c || !master) return;
+    const t = c.currentTime + delay;
+    const len = Math.floor(c.sampleRate * 0.35);
+    const buf = c.createBuffer(1, len, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.sin((Math.PI * i) / len);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 1.2;
+    f.frequency.setValueAtTime(500, t);
+    f.frequency.exponentialRampToValueAtTime(4500, t + 0.3);
+    const g = c.createGain();
+    g.gain.value = 0.3;
+    src.connect(f).connect(g).connect(master);
+    src.start(t);
+  },
+  /** A synthetic crowd roar; intensity 0..1 controls length and loudness. */
+  cheer(intensity = 0.6, delay = 0) {
+    const c = ac();
+    if (!c || !master) return;
+    const t = c.currentTime + delay;
+    const dur = 1.2 + intensity * 1.6;
+    const len = Math.floor(c.sampleRate * dur);
+    const buf = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let last = 0;
+      for (let i = 0; i < len; i++) {
+        // Brown-ish noise with a slow random "voices" wobble.
+        last = (last + (Math.random() * 2 - 1) * 0.08) * 0.985;
+        const wobble = 0.7 + 0.3 * Math.sin(i / (900 + ch * 137)) * Math.sin(i / 3100);
+        d[i] = last * 3.2 * wobble;
+      }
+    }
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const f = c.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 900;
+    f.Q.value = 0.5;
+    const g = c.createGain();
+    const peak = 0.25 + intensity * 0.45;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.25);
+    g.gain.setValueAtTime(peak, t + dur * 0.45);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f).connect(g).connect(master);
+    src.start(t);
+    // A few whistles / "woo"s on top.
+    const whistles = Math.round(1 + intensity * 4);
+    for (let i = 0; i < whistles; i++) {
+      const d0 = delay + 0.15 + Math.random() * dur * 0.5;
+      tone(1400 + Math.random() * 900, 0.35, { delay: d0, type: "sine", gain: 0.05, slide: 1.35 });
+    }
+    // Claps
+    const claps = Math.round(6 + intensity * 18);
+    for (let i = 0; i < claps; i++) noise(0.03, { delay: delay + 0.2 + Math.random() * dur * 0.7, freq: 2200 + Math.random() * 1500, gain: 0.1, q: 1.5 });
+  },
+  /** Brassy victory fanfare. */
+  fanfare(delay = 0) {
+    const chords = [
+      [392, 494, 587],
+      [440, 554, 659],
+      [523, 659, 784, 1046],
+    ];
+    chords.forEach((ch, i) =>
+      ch.forEach((f) => tone(f, i === 2 ? 0.9 : 0.18, { delay: delay + i * 0.16, type: "sawtooth", gain: 0.05 })),
+    );
+    chords[2]!.forEach((f) => tone(f * 2, 0.8, { delay: delay + 0.32, type: "triangle", gain: 0.05 }));
+  },
+  houseWins(delay = 0) {
+    [392, 370, 349, 294].forEach((f, i) => tone(f, i === 3 ? 0.7 : 0.3, { delay: delay + i * 0.28, type: "sawtooth", gain: 0.05, slide: i === 3 ? 0.85 : 1 }));
+  },
+  noMoreBets() {
+    tone(988, 0.16, { type: "triangle", gain: 0.2 });
+    tone(740, 0.3, { type: "triangle", gain: 0.2, delay: 0.14 });
+  },
+  softLock() {
+    tone(1500, 0.03, { type: "square", gain: 0.035 });
+  },
 };
 
 export function haptic(pattern: number | number[]) {

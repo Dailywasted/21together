@@ -54,17 +54,20 @@ export function CountdownRing({
   size = 64,
   stroke = 6,
   children,
+  progress = false,
 }: {
   remaining: number;
   total: number;
   size?: number;
   stroke?: number;
   children?: ReactNode;
+  /** Show a fill level (n of m) instead of a timer: no red "hurry" state. */
+  progress?: boolean;
 }) {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const frac = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
-  const urgent = remaining < 3500 && remaining > 0;
+  const urgent = !progress && remaining < 3500 && remaining > 0;
   return (
     <div className="relative grid place-items-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90 absolute inset-0">
@@ -73,7 +76,7 @@ export function CountdownRing({
           cx={size / 2}
           cy={size / 2}
           r={r}
-          stroke={urgent ? "#fb7185" : "#f5c451"}
+          stroke={urgent ? "#fb7185" : progress && frac >= 1 ? "#34d399" : "#f5c451"}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"

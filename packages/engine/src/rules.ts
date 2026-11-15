@@ -11,6 +11,8 @@ export interface Rules {
   maxSeats: number;
   betSeconds: number;
   decisionSeconds: number;
+  /** Step-by-step mode: the host advances every dramatic beat (no countdowns). */
+  manual: boolean;
 }
 
 export const DEFAULT_RULES: Rules = {
@@ -25,6 +27,7 @@ export const DEFAULT_RULES: Rules = {
   maxSeats: 12,
   betSeconds: 15,
   decisionSeconds: 10,
+  manual: false,
 };
 
 /** Clamps host-provided rule changes into sane ranges. */
@@ -42,5 +45,6 @@ export function sanitizeRules(base: Rules, patch: Partial<Rules>): Rules {
   r.decisionSeconds = clamp(r.decisionSeconds, 4, 30);
   r.dealerHitsSoft17 = !!r.dealerHitsSoft17;
   r.dealerPeek = !!r.dealerPeek;
+  r.manual = !!r.manual;
   return r;
 }

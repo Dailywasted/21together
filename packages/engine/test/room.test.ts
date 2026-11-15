@@ -185,6 +185,68 @@ describe("RoomCore lifecycle", () => {
     expect(room.state.players[ids[0]!]!.chips).toBe(1000);
   });
 
+  it("step mode waits for the host at every dramatic beat", () => {
+    const { room, ids, now, advance } = setup(2);
+    const [a, b] = ids as [string, string];
+    room.updateRules({ manual: true }, now());
+    room.hostStart(now());
+    expect(room.state.phase).toBe("betting");
+    expect(room.state.deadline).toBeNull();
+    expect(room.snapshot(now()).awaitingHost).toBe(true);
+    // Shared 10,6 ; dealer 9 up, 7 hole; next 5, dealer draws 2.
+    rig(room, ["10S", "9H", "6D", "7C", "5S", "2D"]);
+    room.placeBet(a, 100, true, now());
+    room.placeBet(b, 50, true, now());
+    advance(120_000);
+    expect(room.state.phase).toBe("betting"); // no timer
+    room.skip(now()); // "No more bets"
+    expect(room.state.phase).toBe("dealing");
+    advance(TIMING.dealMs); // animation phases still flow on their own
+    expect(room.state.phase).toBe("deciding");
+    expect(room.state.awaitingHost).toBe(true);
+    room.decide(a, "hit", now());
+    room.decide(b, "stand", now());
+    advance(60_000);
+    expect(room.state.phase).toBe("deciding"); // all decided, still waits for the host
+    room.skip(now());
+    expect(room.state.phase).toBe("drawing");
+    advance(TIMING.drawMs);
+    expect(room.state.phase).toBe("dealer"); // a has 21 → done
+    advance(60_000);
+    expect(room.state.dealerShown).toBe(1);
+    room.skip(now()); // flip the hole card
+    expect(room.state.dealerShown).toBe(2);
+    expect(room.state.awaitingHost).toBe(true); // 16 → the dealer must draw
+    room.skip(now());
+    expect(room.state.dealerShown).toBe(3);
+    expect(room.state.awaitingHost).toBe(false); // last card → payout on its own
+    advance(TIMING.dealerCardMs);
+    expect(room.state.phase).toBe("payout");
+    advance(60_000);
+    expect(room.state.phase).toBe("payout");
+    room.skip(now());
+    expect(room.state.phase).toBe("betting");
+  });
+
+  it("switching pacing mid-phase converts the timer", () => {
+    const { room, now, advance } = setup(1);
+    room.hostStart(now());
+    expect(room.state.deadline).not.toBeNull();
+    room.updateRules({ manual: true }, now());
+    expect(room.state.deadline).toBeNull();
+    expect(room.state.awaitingHost).toBe(true);
+    advance(60_000);
+    expect(room.state.phase).toBe("betting");
+    room.updateRules({ manual: false }, now());
+    expect(room.state.awaitingHost).toBe(false);
+    expect(room.state.deadline! - now()).toBe(room.state.rules.betSeconds * 1000);
+    room.pause(now());
+    room.updateRules({ manual: true }, now());
+    room.resume(now());
+    expect(room.state.deadline).toBeNull();
+    expect(room.state.awaitingHost).toBe(true);
+  });
+
   it("serializes and restores state", () => {
     const { room, now } = setup(3);
     room.hostStart(now());

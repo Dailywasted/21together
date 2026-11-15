@@ -28,7 +28,7 @@ interface Floater {
 let seq = 0;
 
 /** Sounds, toasts, reactions and celebrations driven by room events (TV side). */
-export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number }) {
+export function Effects({ snap, offset, variant = "table" }: { snap: PublicSnapshot; offset: number; variant?: "table" | "arena" }) {
   const t = useT();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [floaters, setFloaters] = useState<Floater[]>([]);
@@ -40,6 +40,8 @@ export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number
   useEffect(() => {
     return onRoomEvent((e) => {
       const s = snapRef.current;
+      // The big screen times its own card sounds and celebrations.
+      if (variant === "arena" && (e.k === "deal" || e.k === "step" || e.k === "dealerCard" || e.k === "payout")) return;
       switch (e.k) {
         case "deal":
           [0, 0.25, 0.5, 0.75].forEach((d) => sfx.deal(d));
@@ -89,10 +91,11 @@ export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number
           break;
       }
     });
-  }, [t]);
+  }, [t, variant]);
 
   useEffect(() => {
     return onReaction((playerId, emoji) => {
+      if (variant === "arena") return; // seat tiles float their own reactions
       const s = snapRef.current;
       const p = s.players.find((x) => x.id === playerId);
       if (!p || p.seat === null) return;
@@ -101,7 +104,7 @@ export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number
       setFloaters((fs) => [...fs.slice(-20), f]);
       setTimeout(() => setFloaters((fs) => fs.filter((x) => x.id !== f.id)), 2200);
     });
-  }, []);
+  }, [variant]);
 
   // Countdown ticks in the last 3 seconds.
   const lastTick = useRef(-1);
@@ -122,7 +125,9 @@ export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number
   return (
     <>
       {/* achievement toasts */}
-      <div className="pointer-events-none absolute left-[96px] top-[104px] z-30 flex flex-col items-start gap-2">
+      <div
+        className={`pointer-events-none absolute z-30 flex flex-col items-start gap-2 ${variant === "arena" ? "left-[40px] top-[96px]" : "left-[96px] top-[104px]"}`}
+      >
         <AnimatePresence>
           {toasts.map((x) => (
             <motion.div
@@ -190,7 +195,7 @@ export function Effects({ snap, offset }: { snap: PublicSnapshot; offset: number
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="absolute left-[1330px] top-[250px] z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/60 px-4 py-1.5 text-sm font-bold text-gold"
+            className={`absolute z-20 -translate-x-1/2 whitespace-nowrap rounded-full bg-black/60 px-4 py-1.5 text-sm font-bold text-gold ${variant === "arena" ? "left-1/2 top-[64px]" : "left-[1330px] top-[250px]"}`}
           >
             🔀 {t("shuffling")}
           </motion.div>

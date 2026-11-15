@@ -186,7 +186,7 @@ export class GameRoom extends DurableObject<Env> {
             }
             case "topup": room.topUp(c.playerId, c.amount); break;
             case "topupBroke": room.topUpBroke(); break;
-            case "rules": room.updateRules(c.rules); break;
+            case "rules": room.updateRules(c.rules, now); break;
           }
           break;
         }

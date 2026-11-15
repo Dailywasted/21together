@@ -11,7 +11,9 @@ Everyone gets **the same cards**, and each player decides on their own to **hit,
 1. Plug the laptop into the TV and open https://21together.<your-subdomain>.workers.dev in Chrome.
 2. Click **Host a table**. Press **F** for fullscreen and click once anywhere (this enables sound).
 3. Guests scan the QR code on the TV (or type the 4-letter code), pick a name and an avatar, and tap **Take a seat**.
-4. Press **Space** (or the **Start the game** button). Rounds run on their own after that.
+4. Press **Space** (or the **Start the game** button).
+   - **Step by step** (press `M` or use the Auto / Step toggle): there are no countdowns, and you advance every beat with **Space** or **→**: *No more bets → Reveal → Flip the hole card → Dealer draws → Next round*. A presentation clicker works too (→ / PageDown). Dealing and card flips still animate on their own.
+   - **Auto**: timers run the rounds by themselves (15 s to bet, 10 s per decision).
 5. At the end, open **End the night** in the host bar to show the awards and podium.
 
 **Host keyboard shortcuts** (on the TV laptop)
@@ -19,12 +21,18 @@ Everyone gets **the same cards**, and each player decides on their own to **hit,
 | Key | Action |
 |---|---|
 | `H` | show/hide host controls |
-| `Space` | start / pause / resume |
-| `N` | skip the current timer |
+| `Space` | start · step mode: next beat · auto mode: pause / resume |
+| `→` / `N` / `PageDown` | next beat (skips the timer in auto mode) |
+| `M` | switch between Auto and Step by step |
+| `V` | switch between the **Big screen** view (default) and the **Table** view |
 | `P` | players: top up chips (+500 / +1000), kick, ban |
 | `S` | settings (decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
 | `F` | fullscreen |
 | `Esc` | close a panel |
+
+Views:
+- **Big screen** (default): a casino-style stadium display. Huge dealer and shared cards, a row of seats along the bottom, a live leaderboard, the bust risk, and HIT/STAND tallies. Call-outs like "No more bets!", "BUST ×4" and "Dealer busts!" appear, and the whole room celebrates together with a sunburst, confetti and crowd cheers. It stretches to fill ultrawide TVs.
+- **Table**: the original top-down felt table with chairs around the arc.
 
 Good to know:
 - 12 seats max. Extra people wait "on the rail" and get the next free seat.
@@ -65,6 +73,7 @@ npm run dev:web                # http://localhost:5173  (phones on the same Wi-F
 node scripts/bots.mjs http://localhost:8787 13 3     # 13 bots play 3 rounds (load test)
 node scripts/e2e.mjs http://localhost:5173           # reconnect / kick / not-found checks
 node scripts/shots.mjs http://localhost:5173 12 fr   # screenshots of every phase → screenshots/
+node scripts/arena.mjs http://localhost:5173 8 en 2560   # big-screen step-mode walkthrough → screenshots/arena/
 ```
 
 Deploy:

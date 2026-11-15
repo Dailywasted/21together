@@ -21,12 +21,12 @@ export type RoomPhase = "lobby" | "betting" | "dealing" | "deciding" | "drawing"
 /** Animation-driven phase durations (ms). */
 export const TIMING = {
   dealMs: 2600,
-  drawMs: 1700,
+  drawMs: 2300,
   noDrawMs: 900,
   allLockedMs: 900,
   allDecidedMs: 450,
-  dealerFirstMs: 900,
-  dealerCardMs: 950,
+  dealerFirstMs: 1100,
+  dealerCardMs: 1400,
   payoutMs: 6500,
 } as const;
 
@@ -125,6 +125,8 @@ export interface RoomState {
   /** Length of the current timed phase (for countdown rings). */
   phaseMs: number;
   paused: { remaining: number | null } | null;
+  /** Step-by-step mode: the room is waiting for the host to press "next". */
+  awaitingHost?: boolean;
   roundNo: number;
   shoe: Shoe;
   round: RoundState | null;
@@ -209,6 +211,7 @@ export class RoomCore {
       deadline: null,
       phaseMs: 0,
       paused: null,
+      awaitingHost: false,
       roundNo: 0,
       shoe: createShoe(r.decks, rng, r.penetration),
       round: null,
@@ -286,8 +289,8 @@ export class RoomCore {
     this.placePlayer(p);
     this.events.push({ k: "joined", playerId: p.id, name: p.name });
     // Betting was idle with nobody seated: start the clock now.
-    if (s.phase === "betting" && s.deadline === null && !s.paused && p.seat !== null) {
-      this.setDeadline(now, s.rules.betSeconds * 1000);
+    if (s.phase === "betting" && s.deadline === null && !s.awaitingHost && !s.paused && p.seat !== null) {
+      this.hold(now, s.rules.betSeconds * 1000);
     }
     return p;
   }
@@ -386,10 +389,11 @@ export class RoomCore {
       this.events.push({ k: "shuffle" });
     }
     const anySeated = s.seats.some((x) => x !== null);
-    if (anySeated) this.setDeadline(now, s.rules.betSeconds * 1000);
+    if (anySeated) this.hold(now, s.rules.betSeconds * 1000);
     else {
       s.deadline = null;
       s.phaseMs = 0;
+      s.awaitingHost = false;
     }
   }
 
@@ -440,7 +444,7 @@ export class RoomCore {
 
   private enterDeciding(now: number): void {
     this.state.phase = "deciding";
-    this.setDeadline(now, this.state.rules.decisionSeconds * 1000);
+    this.hold(now, this.state.rules.decisionSeconds * 1000);
   }
 
   private resolveDecisions(now: number): void {
@@ -476,7 +480,7 @@ export class RoomCore {
     if (r.phase !== "settled") playDealer(r, s.shoe, this.rng, s.rules);
     s.phase = "dealer";
     s.dealerShown = 1;
-    this.setDeadline(now, TIMING.dealerFirstMs);
+    this.hold(now, TIMING.dealerFirstMs);
   }
 
   private advanceDealer(now: number): void {
@@ -485,7 +489,9 @@ export class RoomCore {
     if (s.dealerShown < r.dealer.length) {
       s.dealerShown++;
       this.events.push({ k: "dealerCard", card: r.dealer[s.dealerShown - 1]!, index: s.dealerShown - 1 });
-      this.setDeadline(now, TIMING.dealerCardMs);
+      // The last dealer card flows straight into the payout; earlier ones wait for the host in step mode.
+      if (s.dealerShown < r.dealer.length) this.hold(now, TIMING.dealerCardMs);
+      else this.setDeadline(now, TIMING.dealerCardMs);
     } else {
       this.payout(now);
     }
@@ -554,7 +560,7 @@ export class RoomCore {
     if (s.history.length > 200) s.history.length = 200;
     s.dealerShown = r.dealer.length;
     s.phase = "payout";
-    this.setDeadline(now, TIMING.payoutMs);
+    this.hold(now, TIMING.payoutMs);
     this.events.push({ k: "payout", results });
     this.completed.push({
       summary,
@@ -611,16 +617,55 @@ export class RoomCore {
     const rem = s.paused.remaining;
     s.paused = null;
     if (rem !== null) s.deadline = now + Math.max(rem, 600);
-    else if (s.phase === "betting" && s.seats.some((x) => x !== null)) this.setDeadline(now, s.rules.betSeconds * 1000);
+    else if (!s.awaitingHost && s.phase === "betting" && s.seats.some((x) => x !== null)) this.hold(now, s.rules.betSeconds * 1000);
   }
 
-  /** Ends the current timer immediately. */
+  /** Moves to the next beat now: ends the running timer, or releases a step-mode hold. */
   skip(now: number): void {
     const s = this.state;
     if (s.paused) return;
-    if (s.deadline !== null) {
+    if (s.deadline !== null || s.awaitingHost) {
+      s.awaitingHost = false;
       s.deadline = now;
       this.tick(now);
+    }
+  }
+
+  /** Whether the current phase waits for the host in step mode. */
+  private isHoldPhase(): boolean {
+    const s = this.state;
+    if (s.phase === "betting") return s.seats.some((x) => x !== null);
+    if (s.phase === "deciding" || s.phase === "payout") return true;
+    if (s.phase === "dealer") return !!s.round && s.dealerShown < s.round.dealer.length;
+    return false;
+  }
+
+  private holdMs(): number {
+    const s = this.state;
+    switch (s.phase) {
+      case "betting": return s.rules.betSeconds * 1000;
+      case "deciding": return s.rules.decisionSeconds * 1000;
+      case "payout": return TIMING.payoutMs;
+      default: return s.dealerShown <= 1 ? TIMING.dealerFirstMs : TIMING.dealerCardMs;
+    }
+  }
+
+  /** Switches between automatic timers and step-by-step mode mid-game. */
+  private applyPacing(now: number): void {
+    const s = this.state;
+    if (!this.isHoldPhase()) return;
+    if (s.rules.manual) {
+      if (s.paused) s.paused.remaining = null;
+      else if (s.deadline !== null) {
+        s.deadline = null;
+        s.phaseMs = 0;
+      }
+      s.awaitingHost = true;
+    } else if (s.awaitingHost) {
+      s.awaitingHost = false;
+      const ms = this.holdMs();
+      if (s.paused) s.paused.remaining = ms;
+      else this.setDeadline(now, ms);
     }
   }
 
@@ -659,9 +704,10 @@ export class RoomCore {
     }
   }
 
-  updateRules(patch: Partial<Rules>): void {
+  updateRules(patch: Partial<Rules>, now = Date.now()): void {
     const s = this.state;
     const next = sanitizeRules(s.rules, patch);
+    const pacingChanged = next.manual !== !!s.rules.manual;
     // Seat count can only grow while players are seated beyond it.
     if (next.maxSeats !== s.seats.length) {
       if (next.maxSeats > s.seats.length) {
@@ -685,6 +731,7 @@ export class RoomCore {
       }
     }
     s.rules = next;
+    if (pacingChanged) this.applyPacing(now);
   }
 
   endNight(now: number): void {
@@ -701,6 +748,7 @@ export class RoomCore {
     s.phase = "ended";
     s.deadline = null;
     s.paused = null;
+    s.awaitingHost = false;
     s.awards = computeAwards(Object.values(s.players));
     this.events.push({ k: "ended" });
     void now;
@@ -711,6 +759,17 @@ export class RoomCore {
   private setDeadline(now: number, ms: number): void {
     this.state.deadline = now + ms;
     this.state.phaseMs = ms;
+    this.state.awaitingHost = false;
+  }
+
+  /** A dramatic beat: timed in auto mode, waits for the host's "next" in step mode. */
+  private hold(now: number, ms: number): void {
+    const s = this.state;
+    if (s.rules.manual) {
+      s.deadline = null;
+      s.phaseMs = 0;
+      s.awaitingHost = true;
+    } else this.setDeadline(now, ms);
   }
 
   /** Advances any expired timers. Call on every alarm and before handling commands. */
@@ -808,6 +867,8 @@ export interface PublicSnapshot {
   code: string;
   phase: RoomPhase;
   paused: boolean;
+  /** Step-by-step mode is waiting for the host. */
+  awaitingHost: boolean;
   deadline: number | null;
   phaseMs: number;
   serverNow: number;
@@ -893,6 +954,7 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
     code: s.code,
     phase: s.phase,
     paused: !!s.paused,
+    awaitingHost: !!s.awaitingHost,
     deadline: s.deadline,
     phaseMs: s.phaseMs,
     serverNow: now,

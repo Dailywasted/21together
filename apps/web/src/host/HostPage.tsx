@@ -9,17 +9,25 @@ import { Lobby } from "./Lobby";
 import { Awards } from "./Awards";
 import { HostControls } from "./Controls";
 import { Effects } from "./Effects";
+import { Arena } from "./Arena";
 import { useGame } from "../lib/store";
-import { getHostToken } from "../lib/storage";
+import { getHostToken, load, save } from "../lib/storage";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { unlockAudio } from "../lib/sound";
 import { Logo } from "../components/ui";
 
+export type HostView = "arena" | "table";
+
 export default function HostPage({ code }: { code: string }) {
   const t = useT();
   const { snap, status, role, clockOffset, connect, send } = useGame();
   const [missing, setMissing] = useState(false);
+  const [view, setViewState] = useState<HostView>(() => (load<string>("21t:view", "arena") === "table" ? "table" : "arena"));
+  const setView = (v: HostView) => {
+    save("21t:view", v);
+    setViewState(v);
+  };
   const token = getHostToken(code);
 
   useEffect(() => {
@@ -79,10 +87,16 @@ export default function HostPage({ code }: { code: string }) {
     );
   }
 
+  const arena = view === "arena";
   return (
-    <Stage>
+    <Stage fluid={arena}>
       <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 40% 30%, #0c1512, #06080b 70%)" }} />
-      {snap ? (
+      {snap && arena ? (
+        <>
+          <Arena snap={snap} offset={clockOffset} />
+          <Effects snap={snap} offset={clockOffset} variant="arena" />
+        </>
+      ) : snap ? (
         <>
           <Felt rules={snap.rules} />
           <div className="absolute left-[76px] top-[26px] z-10 flex items-center gap-4">
@@ -103,11 +117,15 @@ export default function HostPage({ code }: { code: string }) {
           <Seats snap={snap} />
           <Sidebar snap={snap} />
           <Effects snap={snap} offset={clockOffset} />
+        </>
+      ) : null}
+      {snap ? (
+        <>
           <AnimatePresence>
             {snap.phase === "lobby" && <Lobby snap={snap} isHost={isHost} onStart={() => cmd({ c: "start" })} />}
           </AnimatePresence>
           {snap.phase === "ended" && <Awards snap={snap} isHost={isHost} onAgain={() => cmd({ c: "start" })} />}
-          {isHost && <HostControls snap={snap} cmd={cmd} />}
+          {isHost && <HostControls snap={snap} cmd={cmd} view={view} setView={setView} />}
           {!isHost && role === "spectator" && status === "open" && (
             <div className="absolute bottom-4 left-6 z-10 text-xs font-semibold text-white/30">{t("spectating")}</div>
           )}

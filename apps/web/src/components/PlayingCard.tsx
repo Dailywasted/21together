@@ -126,9 +126,11 @@ interface Props {
   dim?: boolean;
   glow?: "gold" | "win" | "lose" | null;
   className?: string;
+  /** Extra wait before the face is revealed (suspense). */
+  flipDelay?: number;
 }
 
-export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, className }: Props) {
+export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, className, flipDelay = 0 }: Props) {
   const height = width * 1.4;
   const faceUp = card !== null;
   const shadow =
@@ -151,7 +153,7 @@ export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, class
         style={{ width: "100%", height: "100%", position: "relative", transformStyle: "preserve-3d", borderRadius: width * 0.08, boxShadow: shadow }}
         initial={dealFrom ? { rotateY: 180 } : false}
         animate={{ rotateY: faceUp ? 0 : 180 }}
-        transition={{ type: "spring", stiffness: 140, damping: 18, delay: delay + (dealFrom ? 0.25 : 0) }}
+        transition={{ type: "spring", stiffness: 140, damping: 18, delay: delay + (dealFrom ? 0.25 : 0) + flipDelay }}
       >
         <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
           {card && <FaceSvg card={card} />}
