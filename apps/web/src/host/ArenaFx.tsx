@@ -28,7 +28,7 @@ const isWin = (o: string | null | undefined) => o === "win" || o === "blackjack"
 
 /** Payout timing shared with the celebration overlay. */
 export const overlayMs = (results: RoundResult[]) =>
-  results.some((r) => isWin(r.outcome)) ? 4000 : 2400;
+  results.some((r) => isWin(r.outcome)) ? 5400 : 3200;
 
 // ───────────────────────── marquee lights ─────────────────────────
 
@@ -244,7 +244,7 @@ export function LeaderWatch({ snap }: { snap: PublicSnapshot }) {
       setShown(info);
       sfx.achievement();
       setTimeout(() => setShown((x) => (x?.id === info.id ? null : x)), 3200);
-    }, 4300);
+    }, 7000);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leader?.id, leader?.net]);

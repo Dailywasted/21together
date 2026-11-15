@@ -26,7 +26,19 @@ const DEALER_W = 150;
 const SHARED_W = 176;
 
 /** How long after a card lands its value is "revealed" (totals, busts, badges) — matches the flip animations. */
-const REVEAL = { dealShared: 1500, dealDealer: 900, draw: 1250, dealer: 1150 };
+const REVEAL = { dealShared: 2700, dealDealer: 1700, draw: 2150, dealer: 1950 };
+
+/**
+ * Party pace (seconds). Cards land, sit face down for a beat of suspense, then turn.
+ * Must stay in sync with REVEAL above and TIMING in the engine.
+ */
+const PACE = {
+  deal: [0, 0.6, 1.2, 1.8] as const, // shared #1, dealer up, shared #2, dealer hole
+  dealFlip: 0.35, // pause before a dealt card turns
+  drawDelay: 0.1,
+  drawFlip: 1.3, // face-down suspense on the next shared card
+  dealerFlip: 1.2, // hole card and dealer draws
+};
 
 function useDelayed(value: number, ms: number): number {
   const [v, setV] = useState(value);
@@ -260,8 +272,8 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
                 card={c}
                 width={DEALER_W}
                 dealFrom={{ x: 520 - i * dStep, y: -260 }}
-                delay={dealing ? (i === 0 ? 0.35 : 1.05) : 0}
-                flipDelay={dealing ? 0 : 0.6}
+                delay={dealing ? (i === 0 ? PACE.deal[1] : PACE.deal[3]) : 0}
+                flipDelay={dealing ? PACE.dealFlip : PACE.dealerFlip}
               />
             </div>
           ))}
@@ -286,8 +298,8 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
                 card={c}
                 width={SHARED_W}
                 dealFrom={{ x: 520 - i * sStep, y: -620 }}
-                delay={dealing ? (i === 0 ? 0 : i === 1 ? 0.7 : 0) : 0.1}
-                flipDelay={dealing ? 0 : 0.6}
+                delay={dealing ? (i === 0 ? PACE.deal[0] : i === 1 ? PACE.deal[2] : 0) : PACE.drawDelay}
+                flipDelay={dealing ? PACE.dealFlip : PACE.drawFlip}
                 glow={i === newCard && !lag.pending ? "gold" : null}
               />
             </div>
@@ -952,11 +964,17 @@ function Announcer({ snap, lag, jolt }: { snap: PublicSnapshot; lag: Lag; jolt: 
             animate={{ scale: [0.3, 1.12, 1], opacity: 1, rotate: 0 }}
             exit={{ scale: 1.25, opacity: 0, filter: "blur(8px)" }}
             transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            onAnimationComplete={() => setTimeout(() => setShout((x) => (x?.id === shout.id ? null : x)), 900)}
-            className={`whitespace-nowrap font-display font-bold uppercase leading-none ${SHOUT_CLS[shout.tone]}`}
-            style={{ fontSize: Math.min(shout.size ?? 110, 122), textShadow: "0 6px 30px rgba(0,0,0,.65)" }}
+            onAnimationComplete={() => setTimeout(() => setShout((x) => (x?.id === shout.id ? null : x)), 1700)}
+            className="rounded-[60px] px-16 py-3"
+            // Dark halo so the phase line underneath never reads through the call-out.
+            style={{ backgroundColor: "rgba(4,7,8,.92)", boxShadow: "0 0 60px 40px rgba(4,7,8,.92)" }}
           >
-            {shout.text}
+            <span
+              className={`block whitespace-nowrap font-display font-bold uppercase leading-none ${SHOUT_CLS[shout.tone]}`}
+              style={{ fontSize: Math.min(shout.size ?? 110, 122) }}
+            >
+              {shout.text}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1001,7 +1019,7 @@ function Celebration({ snap }: { snap: PublicSnapshot }) {
                 : "house";
         const p: Party = { id: Date.now(), kind, winners, paid, count: res.length };
         setParty(p);
-        setTimeout(() => setParty((x) => (x?.id === p.id ? null : x)), kind === "house" || kind === "push" ? 2400 : 4000);
+        setTimeout(() => setParty((x) => (x?.id === p.id ? null : x)), kind === "house" || kind === "push" ? 3200 : 5400);
         const ratio = winners.length / res.length;
         if (kind === "house") sfx.houseWins();
         else if (kind === "push") sfx.push();
@@ -1093,7 +1111,7 @@ function Celebration({ snap }: { snap: PublicSnapshot }) {
                     key={r.playerId}
                     initial={{ scale: 0, y: 40, opacity: 0 }}
                     animate={{ scale: 1, y: 0, opacity: 1 }}
-                    transition={{ delay: 0.55 + i * 0.09, type: "spring", stiffness: 380, damping: 16 }}
+                    transition={{ delay: 0.8 + i * 0.15, type: "spring", stiffness: 380, damping: 16 }}
                     className="flex flex-col items-center"
                   >
                     <Avatar emoji={r.avatar} seed={r.playerId} size={92} ring={r.outcome === "blackjack" ? "#f5c451" : "#34d399"} />
@@ -1129,22 +1147,24 @@ function useArenaSounds(snap: PublicSnapshot) {
         switch (e.k) {
           case "deal":
             sfx.noMoreBets();
-            [0.05, 0.4, 0.75, 1.1].forEach((d) => sfx.deal(d + 0.05));
+            PACE.deal.forEach((d) => sfx.deal(d + 0.05));
+            PACE.deal.forEach((d, i) => i !== 3 && sfx.flip(d + 0.25 + PACE.dealFlip + 0.05));
             break;
           case "step":
             if (e.card) {
               sfx.whoosh(0.08);
-              sfx.drumroll(0.6, 0.25);
-              sfx.reveal(0.95);
+              sfx.drumroll(1.25, 0.35);
+              sfx.reveal(PACE.drawDelay + 0.25 + PACE.drawFlip);
             }
             break;
           case "dealerCard":
             if (e.index === 1) {
-              sfx.drumroll(0.8, 0);
-              sfx.reveal(0.85);
+              sfx.drumroll(1.35, 0.05);
+              sfx.reveal(0.25 + PACE.dealerFlip);
             } else {
               sfx.deal(0);
-              sfx.flip(0.85);
+              sfx.drumroll(0.8, 0.6);
+              sfx.flip(0.25 + PACE.dealerFlip);
             }
             break;
         }

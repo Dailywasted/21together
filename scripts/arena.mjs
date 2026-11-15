@@ -77,7 +77,8 @@ async function round(n) {
   await snapTv(`r${n}-all-bets-in`, 500);
   await next(); // no more bets
   await snapTv(`r${n}-no-more-bets`, 350);
-  await snapTv(`r${n}-dealt`, 3400);
+  await snapTv(`r${n}-dealing`, 1500);
+  await snapTv(`r${n}-dealt`, 3600);
   for (let step = 0; step < 6; step++) {
     const deciding = await tv.getByText(/Hit or stand\?|Tirer ou rester/).count();
     if (!deciding) break;
@@ -90,21 +91,22 @@ async function round(n) {
     }
     await snapTv(`r${n}-deciding-${step}`, 500);
     await next(); // reveal
-    await snapTv(`r${n}-reveal-${step}-a`, 450);
-    await snapTv(`r${n}-reveal-${step}-b`, 1100);
-    await tv.waitForTimeout(1400);
+    await snapTv(`r${n}-reveal-${step}-a`, 900);
+    await snapTv(`r${n}-reveal-${step}-b`, 1700);
+    await tv.waitForTimeout(2200);
   }
   // Dealer: flip and draw until payout.
   for (let i = 0; i < 6; i++) {
     const inPayout = await tv.getByText(/Next round|Manche suivante/).count();
     if (inPayout) break;
     await next();
-    await snapTv(`r${n}-dealer-${i}-a`, 500);
-    await snapTv(`r${n}-dealer-${i}-b`, 1100);
+    await snapTv(`r${n}-dealer-${i}-a`, 800);
+    await snapTv(`r${n}-dealer-${i}-b`, 1600);
+    await tv.waitForTimeout(800);
   }
   await snapTv(`r${n}-payout-a`, 700);
   await snapTv(`r${n}-payout-b`, 1300);
-  await snapTv(`r${n}-payout-c`, 3200);
+  await snapTv(`r${n}-payout-c`, 4400);
   await next(); // next round
   await tv.waitForTimeout(800);
 }

@@ -20,14 +20,15 @@ export type RoomPhase = "lobby" | "betting" | "dealing" | "deciding" | "drawing"
 
 /** Animation-driven phase durations (ms). */
 export const TIMING = {
-  dealMs: 2600,
-  drawMs: 2300,
-  noDrawMs: 900,
+  // Party pace: slow enough for a whole room to follow each card together.
+  dealMs: 4300,
+  drawMs: 3900,
+  noDrawMs: 1400,
   allLockedMs: 900,
   allDecidedMs: 450,
-  dealerFirstMs: 1100,
-  dealerCardMs: 1400,
-  payoutMs: 6500,
+  dealerFirstMs: 1600,
+  dealerCardMs: 2700,
+  payoutMs: 9500,
 } as const;
 
 export interface PlayerStats {
