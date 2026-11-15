@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+*.log
+.env
+.env.*
+test-results/
+playwright-report/
+screenshots/
+.plan-attestation

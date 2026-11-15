@@ -1,0 +1,25 @@
+{
+  "name": "21together",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:worker": "npm run dev -w apps/worker",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w apps/web",
+    "deploy:worker": "npm run deploy -w apps/worker",
+    "deploy:web": "npm run deploy -w apps/web",
+    "e2e": "playwright test"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "zod": "^4.6.7"
+  }
+}
