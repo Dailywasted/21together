@@ -233,6 +233,7 @@ const en = {
   bigWinners: "Big winners",
   round_n: "Round {n}",
   inPlay: "Still in play",
+  newLeader: "New leader",
 };
 
 type Dict = typeof en;
@@ -467,6 +468,7 @@ const fr: Dict = {
   bigWinners: "Gros gagnants",
   round_n: "Manche {n}",
   inPlay: "Encore en jeu",
+  newLeader: "Nouveau meneur",
 };
 
 const dicts: Record<Lang, Dict> = { en, fr };

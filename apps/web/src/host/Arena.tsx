@@ -11,6 +11,7 @@ import { joinUrl } from "../lib/api";
 import { sfx } from "../lib/sound";
 import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "../lib/view";
 import { useStageWidth } from "./Stage";
+import { ChipFlights, GoldDust, LeaderWatch, Marquee, TensionGlow, stripGeometry, useMood, type Lag } from "./ArenaFx";
 
 /**
  * "Big screen" view: the stadium-style display at the front of the room.
@@ -26,14 +27,6 @@ const SHARED_W = 176;
 
 /** How long after a card lands its value is "revealed" (totals, busts, badges) — matches the flip animations. */
 const REVEAL = { dealShared: 1500, dealDealer: 900, draw: 1250, dealer: 1150 };
-
-interface Lag {
-  /** Shared cards whose face has been shown. */
-  shared: number;
-  /** Dealer cards whose face has been shown. */
-  dealer: number;
-  pending: boolean;
-}
 
 function useDelayed(value: number, ms: number): number {
   const [v, setV] = useState(value);
@@ -75,6 +68,7 @@ export function Arena({ snap, offset }: { snap: PublicSnapshot; offset: number }
   const shake = useAnimationControls();
   const [tint, setTint] = useState<{ id: number; color: string } | null>(null);
   useArenaSounds(snap);
+  const mood = useMood(snap);
 
   const jolt = useCallback(
     (color: string, hard = false) => {
@@ -90,6 +84,9 @@ export function Arena({ snap, offset }: { snap: PublicSnapshot; offset: number }
   return (
     <div className="absolute inset-0 overflow-hidden">
       <Backdrop />
+      <GoldDust />
+      <Marquee width={W} mood={mood} />
+      <TensionGlow snap={snap} lag={lag} />
       <AnimatePresence>
         {tint && (
           <motion.div
@@ -113,7 +110,9 @@ export function Arena({ snap, offset }: { snap: PublicSnapshot; offset: number }
         <PlayerStrip snap={snap} lag={lag} width={W} />
       </motion.div>
       <Announcer snap={snap} lag={lag} jolt={jolt} />
+      <ChipFlights snap={snap} width={W} />
       <Celebration snap={snap} />
+      <LeaderWatch snap={snap} />
     </div>
   );
 }
@@ -735,9 +734,8 @@ function PlayerStrip({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; wid
       }),
     [],
   );
-  const n = snap.seats.length;
   const gap = 12;
-  const tileW = Math.min(176, (width - 80 - (n - 1) * gap) / n);
+  const { tileW } = stripGeometry(width, snap.seats.length);
   const byId = new Map(snap.players.map((p) => [p.id, p]));
   return (
     <div className="absolute inset-x-0 bottom-0 flex items-end justify-center pb-5" style={{ height: STRIP_H, gap }}>
@@ -786,7 +784,9 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
       : "ring-2 ring-win bg-win/12 shadow-[0_0_46px_-8px_rgba(52,211,153,.75)]"
     : outcome === "push"
       ? "ring-1 ring-push/60 bg-push/8"
-      : "ring-1 ring-white/10 bg-white/[.045]";
+      : p.streak >= 3 && !lost
+        ? "tile-fire bg-[#ff7a1a]/[.08]"
+        : "ring-1 ring-white/10 bg-white/[.045]";
   return (
     <motion.div
       layout

@@ -158,6 +158,48 @@ body {
   animation: sweep 1.4s ease-out 0.35s 1 both;
 }
 
+/* Marquee bulbs: jump bulb to bulb like a real casino sign. */
+@keyframes marquee {
+  to { stroke-dashoffset: -132; }
+}
+.marquee-chase {
+  animation: marquee 2s steps(6) infinite;
+}
+
+@keyframes dust-float {
+  0% { transform: translate(0, 0); opacity: 0; }
+  15% { opacity: 0.9; }
+  85% { opacity: 0.6; }
+  100% { transform: translate(40px, -220px); opacity: 0; }
+}
+.dust {
+  position: absolute;
+  border-radius: 9999px;
+  background: radial-gradient(circle, #fff3c4, #f5c451 55%, transparent 70%);
+  animation: dust-float 12s linear infinite;
+}
+
+@keyframes tile-fire {
+  0%, 100% { box-shadow: 0 0 0 2px #ff8a1f, 0 0 26px -2px rgb(255 120 30 / 0.75), inset 0 -20px 40px -20px rgb(255 120 30 / 0.5); }
+  50% { box-shadow: 0 0 0 2px #ffcb3d, 0 0 44px 2px rgb(255 160 40 / 0.9), inset 0 -26px 50px -18px rgb(255 90 20 / 0.6); }
+}
+.tile-fire {
+  animation: tile-fire 0.9s ease-in-out infinite;
+}
+
+/* Wide-gamut TVs (HDR / P3): richer gold, greens and reds. */
+@media (color-gamut: p3) {
+  @supports (color: color(display-p3 1 1 1)) {
+    :root {
+      --color-gold: color(display-p3 1 0.77 0.22);
+      --color-gold-2: color(display-p3 1 0.9 0.5);
+      --color-win: color(display-p3 0.15 0.92 0.58);
+      --color-lose: color(display-p3 1 0.33 0.45);
+      --color-push: color(display-p3 0.5 0.75 1);
+    }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
