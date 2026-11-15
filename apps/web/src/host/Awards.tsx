@@ -86,14 +86,22 @@ export function Awards({ snap, isHost, onAgain }: { snap: PublicSnapshot; isHost
           ))}
         </div>
 
-        {isHost && (
-          <button
-            onClick={onAgain}
-            className="btn-press mt-auto rounded-2xl bg-white px-10 py-4 font-display text-2xl font-bold text-ink"
+        <div className="mt-auto flex items-center gap-4">
+          <a
+            href="/"
+            className="btn-press rounded-2xl bg-white/10 px-8 py-4 font-display text-2xl font-bold text-white ring-1 ring-white/15 hover:bg-white/15"
           >
-            {t("newNight")} ↻
-          </button>
-        )}
+            ← {t("mainMenu")}
+          </a>
+          {isHost && (
+            <button
+              onClick={onAgain}
+              className="btn-press rounded-2xl bg-white px-10 py-4 font-display text-2xl font-bold text-ink"
+            >
+              {t("newNight")} ↻
+            </button>
+          )}
+        </div>
       </div>
     </motion.div>
   );
