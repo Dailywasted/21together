@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type { HostCmd } from "@21/protocol";
 import { Stage } from "./Stage";
-import { Felt, DealerHand, SharedRow, Seats, Shoe } from "./Table";
+import { Felt, DealerHand, SharedRow, Seats, Shoe, BettingHint } from "./Table";
 import { Sidebar } from "./Sidebar";
 import { Banner } from "./Banner";
 import { Lobby } from "./Lobby";
@@ -99,6 +99,7 @@ export default function HostPage({ code }: { code: string }) {
           <DealerHand snap={snap} />
           <Banner snap={snap} offset={clockOffset} />
           <SharedRow snap={snap} />
+          <BettingHint snap={snap} />
           <Seats snap={snap} />
           <Sidebar snap={snap} />
           <Effects snap={snap} offset={clockOffset} />

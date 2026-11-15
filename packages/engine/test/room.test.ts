@@ -19,6 +19,11 @@ function setup(n = 2) {
 }
 
 describe("RoomCore lifecycle", () => {
+  it("fills seats from the middle outward", () => {
+    const { room } = setup(3);
+    expect(room.state.seats.map((x) => (x ? 1 : 0)).join("")).toBe("000011100000");
+  });
+
   it("seats players and puts the 13th on the rail", () => {
     const { room } = setup(13);
     expect(room.state.seats.filter(Boolean)).toHaveLength(12);
@@ -146,11 +151,12 @@ describe("RoomCore lifecycle", () => {
   it("kick frees the seat, bans, and promotes the rail next round", () => {
     const { room, ids, now } = setup(13);
     const railId = room.state.rail[0]!;
+    const freedSeat = room.state.players[ids[0]!]!.seat;
     room.kick(ids[0]!, true);
     expect(() => room.join("dev0", "x", "🦊", now())).toThrow("banned");
     room.hostStart(now());
     expect(room.state.rail).toHaveLength(0);
-    expect(room.state.players[railId]!.seat).toBe(0);
+    expect(room.state.players[railId]!.seat).toBe(freedSeat);
   });
 
   it("shared blackjack round skips decisions", () => {

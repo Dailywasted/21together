@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview --host",
+    "preview": "npm run build && wrangler dev",
     "typecheck": "tsc -p tsconfig.json",
-    "deploy": "vite build && wrangler pages deploy dist --project-name 21together --branch main --commit-dirty=true"
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@21/engine": "0.1.0",
@@ -21,6 +21,7 @@
     "zustand": "^5.1.0"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.69.1",
     "@tailwindcss/vite": "^4.3.5",
     "@types/canvas-confetti": "^1.9.0",
     "@types/qrcode": "^1.5.6",

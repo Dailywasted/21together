@@ -123,7 +123,8 @@ export function DealerHand({ snap }: { snap: PublicSnapshot }) {
   const t = useT();
   const cards = snap.dealer;
   const visible = cards.filter((c): c is Card => c !== null);
-  const total = visible.length > 0 ? totalLabel(visible) : null;
+  const dealerDone = snap.dealer.length >= 2 && snap.dealer.every(Boolean) && (snap.phase === "dealer" || snap.phase === "payout");
+  const total = visible.length > 0 ? (dealerDone ? String(handValue(visible).total) : totalLabel(visible)) : null;
   const v = handValue(visible);
   const allShown = cards.every(Boolean) && cards.length >= 2;
   const width = cards.length * 84 + (DEALER_CARD_W - 84);
@@ -216,7 +217,7 @@ export function SharedRow({ snap }: { snap: PublicSnapshot }) {
                 v.bust ? "bg-lose text-ink" : v.total === 21 ? "bg-gold text-ink" : active ? "bg-white text-ink" : "bg-black/55 text-white"
               }`}
             >
-              {v.bust ? `${v.total} ✕` : totalLabel(cards)}
+              {v.bust ? `${v.total} ✕` : active ? totalLabel(cards) : v.total}
             </div>
             <div className="flex items-center">
               {shown.map((p, i) => (
@@ -352,5 +353,37 @@ function SeatStake({ pos, amount, round }: { pos: { x: number; y: number }; amou
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/** Centerpiece while bets are open: denominations + table limits. */
+export function BettingHint({ snap }: { snap: PublicSnapshot }) {
+  const t = useT();
+  const lang = useLang((s) => s.lang);
+  if (snap.phase !== "betting" || snap.shared.length > 0) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="pointer-events-none absolute flex flex-col items-center"
+      style={{ left: CX, top: 450, transform: "translateX(-50%)" }}
+    >
+      <div className="flex items-end gap-3">
+        {[10, 25, 100, 500].map((v, i) => (
+          <motion.div
+            key={v}
+            initial={{ y: -30, opacity: 0, rotate: -20 }}
+            animate={{ y: 0, opacity: 1, rotate: 0 }}
+            transition={{ delay: 0.1 + i * 0.08, type: "spring", stiffness: 260, damping: 14 }}
+            style={{ filter: "drop-shadow(0 8px 14px rgba(0,0,0,.45))" }}
+          >
+            <ChipStack amount={v * (4 - i)} size={64} />
+          </motion.div>
+        ))}
+      </div>
+      <div className="tabular mt-5 rounded-full bg-black/30 px-5 py-1.5 text-lg font-semibold text-white/70">
+        {t("min")} {fmt(snap.rules.minBet, lang)} · {t("max")} {fmt(snap.rules.maxBet, lang)}
+      </div>
+    </motion.div>
   );
 }

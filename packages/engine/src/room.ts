@@ -168,6 +168,21 @@ export class RoomError extends Error {
 
 export const AVATARS = ["🦊", "🐼", "🐯", "🦁", "🐸", "🐙", "🦄", "🐲", "🦉", "🐺", "🐻", "🐵", "🦈", "🐧", "🦩", "🐝"];
 
+/** Seat indices ordered from the middle of the table outward (fills like a real table). */
+export function seatPreference(n: number): number[] {
+  const order: number[] = [];
+  const mid = (n - 1) / 2;
+  const idx = Array.from({ length: n }, (_, i) => i);
+  idx.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid) || a - b);
+  for (const i of idx) order.push(i);
+  return order;
+}
+
+function firstFreeSeat(seats: (string | null)[]): number {
+  for (const i of seatPreference(seats.length)) if (seats[i] === null) return i;
+  return -1;
+}
+
 export function sanitizeName(name: string): string {
   const cleaned = Array.from(name.replace(/[\u0000-\u001f\u007f<>]/g, "").trim()).slice(0, 16).join("");
   return cleaned || "Player";
@@ -281,7 +296,7 @@ export class RoomCore {
     const s = this.state;
     if (p.seat !== null || s.rail.includes(p.id)) return;
     // Mid-round joiners go to a free seat but only play from the next round (no bet = sits out).
-    const free = s.seats.findIndex((x) => x === null);
+    const free = firstFreeSeat(s.seats);
     if (free >= 0) {
       s.seats[free] = p.id;
       p.seat = free;
@@ -356,12 +371,10 @@ export class RoomCore {
     s.lastStep = null;
     s.dealerShown = 0;
     // Promote rail players into free seats.
-    for (let i = 0; i < s.seats.length && s.rail.length > 0; i++) {
-      if (s.seats[i] === null) {
-        const id = s.rail.shift()!;
-        s.seats[i] = id;
-        s.players[id]!.seat = i;
-      }
+    for (let i = firstFreeSeat(s.seats); i >= 0 && s.rail.length > 0; i = firstFreeSeat(s.seats)) {
+      const id = s.rail.shift()!;
+      s.seats[i] = id;
+      s.players[id]!.seat = i;
     }
     for (const p of Object.values(s.players)) {
       p.bet = 0;

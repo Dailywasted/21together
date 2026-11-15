@@ -10,3 +10,4 @@ playwright-report/
 screenshots/
 .plan-attestation
 dev-*.log
+!apps/web/.env.production

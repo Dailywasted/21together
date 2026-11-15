@@ -48,7 +48,7 @@ function MiniTable({ snap, player }: { snap: PublicSnapshot; player: PublicPlaye
           ))}
         </div>
         {dealerVisible.length > 0 && (
-          <span className="tabular rounded-full bg-black/40 px-2.5 py-0.5 font-display text-base font-bold">{totalLabel(dealerVisible)}</span>
+          <span className="tabular rounded-full bg-black/40 px-2.5 py-0.5 font-display text-base font-bold">{snap.dealer.every(Boolean) && snap.dealer.length >= 2 ? handValue(dealerVisible).total : totalLabel(dealerVisible)}</span>
         )}
       </div>
       <div className="relative mt-3 flex items-center gap-3">
@@ -69,7 +69,7 @@ function MiniTable({ snap, player }: { snap: PublicSnapshot; player: PublicPlaye
               v.bust ? "bg-lose text-ink" : v.total === 21 ? "bg-gold text-ink" : "bg-white text-ink"
             }`}
           >
-            {v.bust ? `${v.total}✕` : totalLabel(myCards)}
+            {v.bust ? `${v.total}✕` : h.status === "active" ? totalLabel(myCards) : v.total}
           </motion.span>
         )}
       </div>
