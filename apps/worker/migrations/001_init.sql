@@ -54,7 +54,7 @@ SELECT
   count(*) FILTER (WHERE h.outcome = 'blackjack')                   AS blackjacks,
   count(*) FILTER (WHERE h.total > 21)                              AS busts,
   coalesce(sum(h.net), 0)                                           AS net,
-  coalesce(max(h.net), 0)                                           AS biggest_win,
+  greatest(coalesce(max(h.net), 0), 0)                              AS biggest_win,
   count(DISTINCT r.room_code)                                       AS parties
 FROM players p
 JOIN player_hands h ON h.device_id = p.device_id
