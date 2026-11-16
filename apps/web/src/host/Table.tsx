@@ -6,6 +6,7 @@ import { ChipStack } from "../components/Chip";
 import { Avatar } from "../components/ui";
 import { useT, useLang, fmt } from "../lib/i18n";
 import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel } from "../lib/view";
+import { StreakMeter } from "../components/StreakMeter";
 
 export const TABLE_W = 1600;
 const CX = 800;
@@ -301,6 +302,9 @@ export const Seat = memo(function Seat({
       </div>
       <div className="mt-4 max-w-[136px] truncate text-[15px] font-bold leading-tight">{player.name}</div>
       <div className="tabular text-[13px] font-semibold text-white/50">{fmt(player.chips, lang)}</div>
+      <div className="mt-0.5 flex h-4 items-center">
+        <StreakMeter streak={player.streak} readyIn={snap.bonusReadyIn} size={8} label={false} />
+      </div>
     </motion.div>
   );
 });

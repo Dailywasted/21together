@@ -11,6 +11,7 @@ import { joinUrl } from "../lib/api";
 import { sfx } from "../lib/sound";
 import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "../lib/view";
 import { useStageWidth } from "./Stage";
+import { StreakMeter } from "../components/StreakMeter";
 import { ChipFlights, GoldDust, LeaderWatch, Marquee, stripGeometry, useMood, type Lag } from "./ArenaFx";
 
 /**
@@ -807,8 +808,22 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
       className={`relative flex shrink-0 flex-col items-center rounded-3xl px-2 pb-3 pt-3 backdrop-blur ${frame}`}
       style={{ width: w, height: 196 }}
     >
-      {/* stake */}
-      <div className="flex h-[26px] items-center gap-1.5">
+      {/* one win away from the bonus: tag on the tile's top edge */}
+      <AnimatePresence>
+        {p.streak === 2 && snap.bonusReadyIn === 0 && (
+          <motion.div
+            initial={{ y: 10, opacity: 0, scale: 0.6 }}
+            animate={{ y: 0, opacity: 1, scale: [1, 1.08, 1] }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ scale: { duration: 0.9, repeat: Infinity }, default: { type: "spring", stiffness: 400, damping: 18 } }}
+            className="absolute -top-4 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-gold px-3 py-0.5 text-[13px] font-extrabold text-ink shadow-[0_0_24px_rgba(245,196,81,.75)]"
+          >
+            🦌 {t("oneMore")}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* stake + streak meter */}
+      <div className="flex h-[26px] w-full items-center justify-between gap-1 px-1">
         <AnimatePresence>
           {stake > 0 && (
             <motion.div
@@ -823,12 +838,14 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
             </motion.div>
           )}
         </AnimatePresence>
+        <span className="ml-auto">
+          <StreakMeter streak={p.streak} readyIn={snap.bonusReadyIn} size={13} label={false} />
+        </span>
       </div>
       <div className="relative mt-1.5">
         <div className={badge?.pulse ? "rounded-full pulse-ring" : ""} style={{ filter: p.connected ? undefined : "grayscale(1) brightness(.6)" }}>
           <Avatar emoji={p.avatar} seed={p.id} size={Math.min(72, w * 0.5)} ring={ring} />
         </div>
-        {p.streak >= 3 && <span className="flame absolute -left-2 -top-2 text-xl">🔥</span>}
         {h && h.status !== "busted" && !totalHidden && (
           <span className="tabular absolute -right-4 -top-1 rounded-full bg-white px-2 py-px font-display text-[15px] font-bold text-ink shadow">
             {h.total}
@@ -851,6 +868,7 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
       </div>
       <div className="mt-2 w-full truncate text-center text-[17px] font-bold leading-tight">{p.name}</div>
       <div className="tabular text-[13px] font-semibold text-white/45">{fmt(p.chips, lang)}</div>
+
       <div className="absolute -bottom-3 left-1/2 -translate-x-1/2">
         <AnimatePresence mode="popLayout">
           {badge && (

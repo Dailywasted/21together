@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { StreakMeter } from "../components/StreakMeter";
 import { AnimatePresence, motion } from "motion/react";
 import confetti from "canvas-confetti";
 import { ACHIEVEMENT_ICONS, type AchievementCode } from "@21/engine";
@@ -173,7 +174,7 @@ export default function PlayPage({ code }: { code: string }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 truncate font-bold">
             {player.name}
-            {player.streak >= 3 && <span className="flame text-sm">🔥{player.streak}</span>}
+            <StreakMeter streak={player.streak} readyIn={snap.bonusReadyIn} size={9} />
           </div>
           <div className="text-xs text-white/45">
             {player.seat !== null ? `#${player.seat + 1}` : t("rail")} · {t("code")} {code}

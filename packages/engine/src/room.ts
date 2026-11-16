@@ -1071,6 +1071,8 @@ export interface PublicSnapshot {
   bonus: BonusState | null;
   /** Bonus unlocked during this payout (starts next). */
   bonusPending: { hero: BonusHero | null } | null;
+  /** Rounds before a streak can unlock the next bonus (0 = ready), null when bonuses are off. */
+  bonusReadyIn: number | null;
 }
 
 export interface PrivateView {
@@ -1158,7 +1160,18 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
     awards: s.awards,
     bonus: s.bonus ?? null,
     bonusPending: s.pendingBonus ?? null,
+    bonusReadyIn: bonusReadyIn(s),
   };
+}
+
+const IN_ROUND: RoomPhase[] = ["dealing", "deciding", "drawing", "dealer"];
+
+/** Rounds until the next resolved hand may unlock a bonus (matches checkBonusTrigger). */
+export function bonusReadyIn(s: RoomState): number | null {
+  if (s.rules.bonusGames === false) return null;
+  if (s.pendingBonus || s.phase === "bonus") return BONUS_COOLDOWN;
+  const nextRound = IN_ROUND.includes(s.phase) ? s.roundNo : s.roundNo + 1;
+  return Math.max(0, (s.lastBonusRound ?? -BONUS_COOLDOWN) + BONUS_COOLDOWN - nextRound);
 }
 
 export function computeAwards(all: Player[]): Award[] {

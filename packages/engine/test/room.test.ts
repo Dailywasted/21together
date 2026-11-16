@@ -372,3 +372,19 @@ describe("Reindeer Race bonus", () => {
     expect(room.state.rules.bonusGames).toBe(false);
   });
 });
+
+describe("streak meter cooldown", () => {
+  it("reports when the next bonus can unlock", () => {
+    const { room, now } = setup(1);
+    room.hostStart(now());
+    expect(room.snapshot(now()).bonusReadyIn).toBe(0);
+    room.hostBonus(now());
+    expect(room.snapshot(now()).bonusReadyIn).toBe(6);
+    room.state.phase = "betting";
+    room.state.bonus = null;
+    room.state.roundNo += 2;
+    expect(room.snapshot(now()).bonusReadyIn).toBe(3);
+    room.updateRules({ bonusGames: false }, now());
+    expect(room.snapshot(now()).bonusReadyIn).toBeNull();
+  });
+});
