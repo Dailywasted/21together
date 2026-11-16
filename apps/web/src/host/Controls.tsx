@@ -18,6 +18,7 @@ export function nextLabel(snap: PublicSnapshot): TKey {
     case "deciding": return "next_deciding";
     case "dealer": return snap.dealer[1] === null ? "next_hole" : "next_dealer";
     case "payout": return "next_payout";
+    case "bonus": return snap.bonus?.stage === "results" ? "next_payout" : snap.bonus?.stage === "picking" ? "next_race" : "next";
     default: return "next";
   }
 }
@@ -72,6 +73,7 @@ export function HostControls({
         return;
       } else if (k === "m") cmd({ c: "rules", rules: { manual: !snap.rules.manual } });
       else if (k === "v") setView(view === "arena" ? "table" : "arena");
+      else if (k === "b") cmd({ c: "bonus" });
       else if (k === "p") setModal("players");
       else if (k === "s") setModal("settings");
       else if (k === "f") toggleFullscreen();
@@ -134,6 +136,9 @@ export function HostControls({
                 </button>
               ))}
             </div>
+            {(snap.phase === "betting" || snap.phase === "payout") && !snap.bonusPending && (
+              <DockBtn onClick={() => cmd({ c: "bonus" })}>🦌 {t("hostBonus")}</DockBtn>
+            )}
             <DockBtn onClick={() => setView(view === "arena" ? "table" : "arena")}>
               🖥 {view === "arena" ? t("viewTable") : t("viewArena")}
             </DockBtn>
@@ -340,6 +345,15 @@ function SettingsPanel({ rules, onSave }: { rules: Rules; onSave: (r: Partial<Ru
             type="checkbox"
             checked={!!draft.manual}
             onChange={(e) => setDraft({ ...draft, manual: e.target.checked })}
+            className="h-6 w-6 accent-[#f5c451]"
+          />
+        </label>
+        <label className="flex items-center justify-between rounded-2xl bg-white/5 p-3">
+          <span className="text-sm font-bold">🦌 {t("rule_bonus")}</span>
+          <input
+            type="checkbox"
+            checked={draft.bonusGames !== false}
+            onChange={(e) => setDraft({ ...draft, bonusGames: e.target.checked })}
             className="h-6 w-6 accent-[#f5c451]"
           />
         </label>

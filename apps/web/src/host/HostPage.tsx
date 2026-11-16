@@ -10,6 +10,7 @@ import { Awards } from "./Awards";
 import { HostControls } from "./Controls";
 import { Effects } from "./Effects";
 import { Arena } from "./Arena";
+import { BonusTeaser, RaceScreen } from "./Race";
 import { useGame } from "../lib/store";
 import { getHostToken, load, save } from "../lib/storage";
 import { api } from "../lib/api";
@@ -77,7 +78,7 @@ export default function HostPage({ code }: { code: string }) {
     ? "off"
     : snap.paused
       ? "hush"
-      : snap.phase === "deciding"
+      : snap.phase === "deciding" || (snap.phase === "bonus" && snap.bonus?.stage === "racing")
         ? "tension"
         : snap.phase === "dealing" || snap.phase === "drawing" || snap.phase === "dealer"
           ? "hush"
@@ -108,7 +109,12 @@ export default function HostPage({ code }: { code: string }) {
   return (
     <Stage fluid={arena}>
       <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 40% 30%, #0c1512, #06080b 70%)" }} />
-      {snap && arena ? (
+      {snap && snap.phase === "bonus" && snap.bonus ? (
+        <>
+          <RaceScreen snap={snap} offset={clockOffset} />
+          <Effects snap={snap} offset={clockOffset} variant="arena" />
+        </>
+      ) : snap && arena ? (
         <>
           <Arena snap={snap} offset={clockOffset} />
           <Effects snap={snap} offset={clockOffset} variant="arena" />
@@ -138,6 +144,7 @@ export default function HostPage({ code }: { code: string }) {
       ) : null}
       {snap ? (
         <>
+          <BonusTeaser snap={snap} />
           <AnimatePresence>
             {snap.phase === "lobby" && <Lobby snap={snap} isHost={isHost} onStart={() => cmd({ c: "start" })} />}
           </AnimatePresence>

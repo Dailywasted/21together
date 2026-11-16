@@ -22,6 +22,11 @@ export default function PlayPage({ code }: { code: string }) {
   const [missing, setMissing] = useState(false);
   const [joining, setJoining] = useState(false);
   const [tab, setTab] = useState<Tab>("play");
+  // A bonus round pulls everyone back to the play screen to pick their reindeer.
+  const bonusOn = snap?.phase === "bonus";
+  useEffect(() => {
+    if (bonusOn) setTab("play");
+  }, [bonusOn]);
   const [toast, setToast] = useState<{ id: number; icon: string; title: string; sub: string } | null>(null);
   const [sound, setSound] = useState(soundEnabled());
   const autoJoined = useRef(false);
@@ -237,7 +242,7 @@ export default function PlayPage({ code }: { code: string }) {
             {tab === k && <motion.span layoutId="tab" className="absolute inset-0 rounded-xl bg-white/10" />}
             <span className="relative text-lg leading-none">{icon}</span>
             <span className="relative">{t(label)}</span>
-            {k === "play" && tab !== "play" && (snap.phase === "betting" || snap.phase === "deciding") && (
+            {k === "play" && tab !== "play" && (snap.phase === "betting" || snap.phase === "deciding" || snap.phase === "bonus") && (
               <span className="absolute right-4 top-1 h-2 w-2 rounded-full bg-gold" />
             )}
           </button>

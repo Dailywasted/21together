@@ -9,6 +9,7 @@ import { useT, useLang, fmt } from "../lib/i18n";
 import { timeLeft, useGame } from "../lib/store";
 import { haptic, sfx } from "../lib/sound";
 import { totalLabel } from "../lib/view";
+import { BonusPanel } from "./BonusPanel";
 
 const CHIP_VALUES = [10, 25, 100, 500];
 
@@ -16,7 +17,8 @@ export function PlayPanel({ snap, me, player }: { snap: PublicSnapshot; me: Priv
   const h = player.hand;
   const busy =
     (snap.phase === "betting" && player.seat !== null && !player.betLocked && player.chips >= snap.rules.minBet) ||
-    (snap.phase === "deciding" && h?.status === "active");
+    (snap.phase === "deciding" && h?.status === "active") ||
+    (snap.phase === "bonus" && (snap.bonus?.stage === "picking" || snap.bonus?.stage === "intro"));
   return (
     <div className="flex flex-1 flex-col gap-3">
       <MiniTable snap={snap} player={player} />
@@ -95,6 +97,7 @@ function ActionArea({ snap, me, player }: { snap: PublicSnapshot; me: PrivateVie
     );
   }
   if (snap.phase === "lobby") return <InfoCard icon="⏳" title={t("waitingPlayers")} body={t("watchTv")} />;
+  if (snap.phase === "bonus" && snap.bonus) return <BonusPanel snap={snap} player={player} />;
   if (snap.phase === "betting") {
     if (player.chips < snap.rules.minBet) return <InfoCard icon="🪙" title={t("brokeTitle")} body={t("brokeBody")} />;
     return <BetPanel snap={snap} me={me} player={player} />;

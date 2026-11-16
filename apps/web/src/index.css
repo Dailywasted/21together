@@ -200,6 +200,34 @@ body {
   }
 }
 
+/* Reindeer Race scenery */
+@keyframes snowfall {
+  from { transform: translate(0, -20px); }
+  to { transform: translate(var(--drift, 0px), 1100px); }
+}
+.snowflake {
+  position: absolute;
+  top: -20px;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.85);
+  filter: blur(0.5px);
+  animation: snowfall 10s linear infinite;
+}
+@keyframes aurora {
+  0%, 100% { opacity: 0.7; transform: translateX(0); }
+  50% { opacity: 1; transform: translateX(40px); }
+}
+.aurora {
+  animation: aurora 9s ease-in-out infinite;
+}
+@keyframes track-run {
+  to { background-position: -160px 0; }
+}
+.track-run {
+  background-image: repeating-linear-gradient(90deg, rgb(255 255 255 / 0.08) 0 40px, transparent 40px 160px);
+  animation: track-run 0.35s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

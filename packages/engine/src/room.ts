@@ -15,8 +15,9 @@ import {
   type RoundState,
 } from "./round";
 import { ACHIEVEMENTS, type AchievementCode } from "./achievements";
+import { makeRunners, makeScript, RACE_RUNNERS, type RaceScript, type Runner } from "./race";
 
-export type RoomPhase = "lobby" | "betting" | "dealing" | "deciding" | "drawing" | "dealer" | "payout" | "ended";
+export type RoomPhase = "lobby" | "betting" | "dealing" | "deciding" | "drawing" | "dealer" | "payout" | "bonus" | "ended";
 
 /** Animation-driven phase durations (ms). */
 export const TIMING = {
@@ -29,7 +30,45 @@ export const TIMING = {
   dealerFirstMs: 1600,
   dealerCardMs: 2700,
   payoutMs: 9500,
+  // Reindeer Race bonus
+  bonusIntroMs: 5500,
+  bonusPickMs: 15000,
+  bonusAllPickedMs: 1500,
+  raceMs: 21000,
+  bonusResultMs: 9000,
 } as const;
+
+/** Rounds that must pass between two bonus games. */
+export const BONUS_COOLDOWN = 6;
+/** Win streak that unlocks a bonus. */
+export const BONUS_STREAK = 3;
+
+export type BonusStage = "intro" | "picking" | "racing" | "results";
+
+export interface BonusHero {
+  playerId: string;
+  name: string;
+  avatar: string;
+}
+
+export interface BonusWinner {
+  playerId: string;
+  name: string;
+  avatar: string;
+  prize: number;
+  hero: boolean;
+}
+
+export interface BonusState {
+  kind: "race";
+  stage: BonusStage;
+  /** Who unlocked it (null when the host started it). Their prize is doubled. */
+  hero: BonusHero | null;
+  runners: Runner[];
+  picks: Record<string, number>;
+  script: RaceScript | null;
+  winners: BonusWinner[] | null;
+}
 
 export interface PlayerStats {
   hands: number;
@@ -141,6 +180,10 @@ export interface RoomState {
   history: RoundSummary[];
   awards: Award[] | null;
   idSeq: number;
+  bonus?: BonusState | null;
+  /** A bonus unlocked during this payout; it starts when the payout ends. */
+  pendingBonus?: { hero: BonusHero | null } | null;
+  lastBonusRound?: number;
 }
 
 export type RoomEvent =
@@ -155,6 +198,9 @@ export type RoomEvent =
   | { k: "achievement"; playerId: string; name: string; code: AchievementCode }
   | { k: "kicked"; playerId: string }
   | { k: "topup"; playerId: string; amount: number }
+  | { k: "bonusUnlocked"; hero: BonusHero | null }
+  | { k: "bonus"; stage: BonusStage }
+  | { k: "bonusResult"; winner: number; winners: BonusWinner[] }
   | { k: "ended" };
 
 /** Emitted when a round is complete, for persistence. */
@@ -562,6 +608,7 @@ export class RoomCore {
     s.dealerShown = r.dealer.length;
     s.phase = "payout";
     this.hold(now, TIMING.payoutMs);
+    this.checkBonusTrigger(results);
     this.events.push({ k: "payout", results });
     this.completed.push({
       summary,
@@ -595,6 +642,130 @@ export class RoomCore {
     if (net >= 500) this.award(p, "big_win");
   }
 
+  // ───────────────────────── bonus: reindeer race ─────────────────────────
+
+  private checkBonusTrigger(results: RoundResult[]): void {
+    const s = this.state;
+    if (s.rules.bonusGames === false || s.pendingBonus) return;
+    if (s.roundNo - (s.lastBonusRound ?? -BONUS_COOLDOWN) < BONUS_COOLDOWN) return;
+    const hot = results
+      .filter(
+        (r) => (r.outcome === "win" || r.outcome === "blackjack") && (s.players[r.playerId]?.stats.streak ?? 0) >= BONUS_STREAK,
+      )
+      .sort((a, b) => s.players[b.playerId]!.stats.streak - s.players[a.playerId]!.stats.streak || b.net - a.net)[0];
+    if (!hot) return;
+    const hero = { playerId: hot.playerId, name: hot.name, avatar: hot.avatar };
+    s.pendingBonus = { hero };
+    this.events.push({ k: "bonusUnlocked", hero });
+  }
+
+  private startBonus(now: number, hero: BonusHero | null): void {
+    const s = this.state;
+    s.phase = "bonus";
+    s.round = null;
+    s.lastStep = null;
+    s.dealerShown = 0;
+    s.pendingBonus = null;
+    s.lastBonusRound = s.roundNo;
+    for (const p of Object.values(s.players)) {
+      p.bet = 0;
+      p.betLocked = false;
+    }
+    s.bonus = {
+      kind: "race",
+      stage: "intro",
+      hero,
+      runners: makeRunners(this.rng, s.rules.startingChips),
+      picks: {},
+      script: null,
+      winners: null,
+    };
+    this.setDeadline(now, TIMING.bonusIntroMs);
+    this.events.push({ k: "bonus", stage: "intro" });
+  }
+
+  private seatedPlayers(): Player[] {
+    const s = this.state;
+    return s.seats.map((id) => (id ? s.players[id] : undefined)).filter((p): p is Player => !!p && !p.left);
+  }
+
+  private advanceBonus(now: number): void {
+    const s = this.state;
+    const b = s.bonus;
+    if (!b) {
+      this.startBetting(now);
+      return;
+    }
+    switch (b.stage) {
+      case "intro":
+        b.stage = "picking";
+        this.hold(now, TIMING.bonusPickMs);
+        break;
+      case "picking": {
+        // Everyone seated races: undecided players get a random reindeer.
+        for (const p of this.seatedPlayers()) {
+          if (b.picks[p.id] === undefined) b.picks[p.id] = Math.floor(this.rng() * RACE_RUNNERS);
+        }
+        b.script = makeScript(b.runners, this.rng);
+        b.stage = "racing";
+        this.setDeadline(now, TIMING.raceMs);
+        break;
+      }
+      case "racing": {
+        const winner = b.script!.order[0]!;
+        const prize = b.runners[winner]!.prize;
+        const winners: BonusWinner[] = [];
+        for (const [pid, pick] of Object.entries(b.picks)) {
+          const p = s.players[pid];
+          if (!p || p.left || pick !== winner) continue;
+          const hero = b.hero?.playerId === pid;
+          const amount = prize * (hero ? 2 : 1);
+          p.chips += amount;
+          winners.push({ playerId: pid, name: p.name, avatar: p.avatar, prize: amount, hero });
+        }
+        winners.sort((x, y) => y.prize - x.prize);
+        b.winners = winners;
+        b.stage = "results";
+        this.hold(now, TIMING.bonusResultMs);
+        this.events.push({ k: "bonusResult", winner, winners });
+        return;
+      }
+      case "results":
+        s.bonus = null;
+        this.startBetting(now);
+        return;
+    }
+    this.events.push({ k: "bonus", stage: b.stage });
+  }
+
+  /** A player picks a reindeer (free). */
+  bonusPick(playerId: string, runner: number, now: number): void {
+    const s = this.state;
+    const b = s.bonus;
+    if (s.phase !== "bonus" || !b || (b.stage !== "intro" && b.stage !== "picking")) throw new RoomError("not_picking");
+    const p = s.players[playerId];
+    if (!p || p.left || p.seat === null) throw new RoomError("not_seated");
+    if (!Number.isInteger(runner) || runner < 0 || runner >= b.runners.length) throw new RoomError("bad_pick");
+    b.picks[playerId] = runner;
+    const all = this.seatedPlayers().every((x) => b.picks[x.id] !== undefined);
+    if (all && b.stage === "picking" && s.deadline !== null && !s.paused) {
+      const target = now + TIMING.bonusAllPickedMs;
+      if (target < s.deadline) s.deadline = target;
+    }
+  }
+
+  /** Host starts a bonus now (from betting) or right after the current payout. */
+  hostBonus(now: number): void {
+    const s = this.state;
+    if (s.phase === "betting") this.startBonus(now, null);
+    else if (s.phase === "payout") {
+      if (!s.pendingBonus) {
+        s.pendingBonus = { hero: null };
+        this.events.push({ k: "bonusUnlocked", hero: null });
+      }
+    } else throw new RoomError("not_now");
+  }
+
   // ───────────────────────── host ─────────────────────────
 
   hostStart(now: number): void {
@@ -625,6 +796,7 @@ export class RoomCore {
   skip(now: number): void {
     const s = this.state;
     if (s.paused) return;
+    if (s.phase === "bonus" && s.bonus?.stage === "racing") return; // let the race finish
     if (s.deadline !== null || s.awaitingHost) {
       s.awaitingHost = false;
       s.deadline = now;
@@ -638,6 +810,7 @@ export class RoomCore {
     if (s.phase === "betting") return s.seats.some((x) => x !== null);
     if (s.phase === "deciding" || s.phase === "payout") return true;
     if (s.phase === "dealer") return !!s.round && s.dealerShown < s.round.dealer.length;
+    if (s.phase === "bonus") return s.bonus?.stage === "picking" || s.bonus?.stage === "results";
     return false;
   }
 
@@ -647,6 +820,7 @@ export class RoomCore {
       case "betting": return s.rules.betSeconds * 1000;
       case "deciding": return s.rules.decisionSeconds * 1000;
       case "payout": return TIMING.payoutMs;
+      case "bonus": return s.bonus?.stage === "picking" ? TIMING.bonusPickMs : TIMING.bonusResultMs;
       default: return s.dealerShown <= 1 ? TIMING.dealerFirstMs : TIMING.dealerCardMs;
     }
   }
@@ -746,6 +920,8 @@ export class RoomCore {
       s.roundNo = Math.max(0, s.roundNo - 1);
     }
     s.round = null;
+    s.bonus = null;
+    s.pendingBonus = null;
     s.phase = "ended";
     s.deadline = null;
     s.paused = null;
@@ -800,7 +976,11 @@ export class RoomCore {
           this.advanceDealer(now);
           break;
         case "payout":
-          this.startBetting(now);
+          if (s.pendingBonus) this.startBonus(now, s.pendingBonus.hero);
+          else this.startBetting(now);
+          break;
+        case "bonus":
+          this.advanceBonus(now);
           break;
         default:
           s.deadline = null;
@@ -888,6 +1068,9 @@ export interface PublicSnapshot {
   history: RoundSummary[];
   shoe: { remaining: number; total: number; shuffleCount: number };
   awards: Award[] | null;
+  bonus: BonusState | null;
+  /** Bonus unlocked during this payout (starts next). */
+  bonusPending: { hero: BonusHero | null } | null;
 }
 
 export interface PrivateView {
@@ -973,6 +1156,8 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
     history: s.history.slice(0, 15),
     shoe: { remaining: cardsRemaining(s.shoe), total: s.shoe.cards.length, shuffleCount: s.shoe.shuffleCount },
     awards: s.awards,
+    bonus: s.bonus ?? null,
+    bonusPending: s.pendingBonus ?? null,
   };
 }
 

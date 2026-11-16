@@ -14,6 +14,7 @@ export const ClientMsg = z.discriminatedUnion("t", [
   z.object({ t: z.literal("bet"), amount: z.number().int().min(0).max(1_000_000), lock: z.boolean() }),
   z.object({ t: z.literal("decide"), action: z.enum(["hit", "stand", "double"]) }),
   z.object({ t: z.literal("react"), emoji: z.string().max(8) }),
+  z.object({ t: z.literal("pick"), runner: z.number().int().min(0).max(5) }),
   z.object({ t: z.literal("ping"), at: z.number() }),
   z.object({
     t: z.literal("host"),
@@ -26,6 +27,7 @@ export const ClientMsg = z.discriminatedUnion("t", [
       z.object({ c: z.literal("kick"), playerId: z.string().max(32), ban: z.boolean().default(false) }),
       z.object({ c: z.literal("topup"), playerId: z.string().max(32), amount: z.number().int().min(1).max(1_000_000) }),
       z.object({ c: z.literal("topupBroke") }),
+      z.object({ c: z.literal("bonus") }),
       z.object({
         c: z.literal("rules"),
         rules: z
@@ -40,6 +42,7 @@ export const ClientMsg = z.discriminatedUnion("t", [
             betSeconds: z.number(),
             decisionSeconds: z.number(),
             manual: z.boolean(),
+            bonusGames: z.boolean(),
           })
           .partial(),
       }),

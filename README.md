@@ -25,10 +25,13 @@ Everyone gets **the same cards**, and each player decides on their own to **hit,
 | `→` / `N` / `PageDown` | next beat (skips the timer in auto mode) |
 | `M` | switch between Auto and Step by step |
 | `V` | switch between the **Big screen** view (default) and the **Table** view |
+| `B` | start a 🦌 **Reindeer Race** bonus (during betting, or right after the current payout) |
 | `P` | players: top up chips (+500 / +1000), kick, ban |
 | `S` | settings (decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
 | `F` | fullscreen |
 | `Esc` | close a panel |
+
+🦌 **Reindeer Race bonus:** when a player wins **3 hands in a row**, a bonus round unlocks (at most once every 6 rounds). Everyone picks a reindeer on their phone for free, and the long shots pay more. The player who unlocked it gets **×2**. You can turn it off in Settings or start one yourself with `B`.
 
 Views:
 - **Big screen** (default): a casino-style stadium display. Huge dealer and shared cards, a row of seats along the bottom, a live leaderboard, the bust risk, and HIT/STAND tallies. Call-outs like "No more bets!", "BUST ×4" and "Dealer busts!" appear, and the whole room celebrates together with a sunburst, confetti and crowd cheers. It stretches to fill ultrawide TVs.

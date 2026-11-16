@@ -226,6 +226,23 @@ export const sfx = {
     tone(988, 0.16, { type: "triangle", gain: 0.2 });
     tone(740, 0.3, { type: "triangle", gain: 0.2, delay: 0.14 });
   },
+  /** Slot-machine style "bonus!" siren + rising arpeggio. */
+  bonusSiren() {
+    for (let i = 0; i < 3; i++) tone(500, 0.35, { delay: i * 0.38, type: "sawtooth", gain: 0.05, slide: 2.2 });
+    [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => tone(f, 0.22, { type: "square", gain: 0.04, delay: 1.15 + i * 0.07 }));
+    noise(0.8, { delay: 1.55, freq: 7000, q: 0.3, gain: 0.18 });
+  },
+  startGun() {
+    noise(0.35, { freq: 900, q: 0.4, gain: 0.7 });
+    tone(80, 0.3, { type: "sine", gain: 0.4, slide: 0.5 });
+  },
+  /** One gallop stride (three quick hoof beats); intensity 0..1. */
+  gallop(intensity = 0.6, delay = 0) {
+    [0, 0.07, 0.14].forEach((d, i) => {
+      noise(0.05, { delay: delay + d, freq: 260 + i * 70, q: 1.2, gain: 0.18 + intensity * 0.25 });
+      tone(70 + i * 12, 0.06, { delay: delay + d, type: "sine", gain: 0.12 + intensity * 0.12 });
+    });
+  },
   softLock() {
     tone(1500, 0.03, { type: "square", gain: 0.035 });
   },

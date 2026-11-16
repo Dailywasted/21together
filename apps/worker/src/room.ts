@@ -155,6 +155,10 @@ export class GameRoom extends DurableObject<Env> {
           if (!att.playerId) throw new RoomError("not_player");
           room.decide(att.playerId, msg.action, now);
           break;
+        case "pick":
+          if (!att.playerId) throw new RoomError("not_player");
+          room.bonusPick(att.playerId, msg.runner, now);
+          break;
         case "react": {
           if (!att.playerId || !(ALLOWED_REACTIONS as readonly string[]).includes(msg.emoji)) return;
           if (now - att.lastReact < 1200) return;
@@ -186,6 +190,7 @@ export class GameRoom extends DurableObject<Env> {
             }
             case "topup": room.topUp(c.playerId, c.amount); break;
             case "topupBroke": room.topUpBroke(); break;
+            case "bonus": room.hostBonus(now); break;
             case "rules": room.updateRules(c.rules, now); break;
           }
           break;

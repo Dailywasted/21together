@@ -13,6 +13,8 @@ export interface Rules {
   decisionSeconds: number;
   /** Step-by-step mode: the host advances every dramatic beat (no countdowns). */
   manual: boolean;
+  /** Bonus mini-games (Reindeer Race) unlocked by win streaks. */
+  bonusGames: boolean;
 }
 
 export const DEFAULT_RULES: Rules = {
@@ -28,6 +30,7 @@ export const DEFAULT_RULES: Rules = {
   betSeconds: 15,
   decisionSeconds: 10,
   manual: false,
+  bonusGames: true,
 };
 
 /** Clamps host-provided rule changes into sane ranges. */
@@ -46,5 +49,6 @@ export function sanitizeRules(base: Rules, patch: Partial<Rules>): Rules {
   r.dealerHitsSoft17 = !!r.dealerHitsSoft17;
   r.dealerPeek = !!r.dealerPeek;
   r.manual = !!r.manual;
+  r.bonusGames = r.bonusGames !== false;
   return r;
 }

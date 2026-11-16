@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RoomCore, TIMING, seededRng, RoomError, type Card } from "../src";
+import { RoomCore, TIMING, seededRng, RoomError, makeRunners, makeScript, RACE_RUNNERS, type Card } from "../src";
 
 function rig(room: RoomCore, cards: Card[]) {
   const filler: Card[] = Array.from({ length: 200 }, () => "2C" as Card);
@@ -285,5 +285,90 @@ describe("RoomCore lifecycle", () => {
       for (const id of ids) expect(s.players[id]!.chips).toBeGreaterThanOrEqual(0);
     }
     expect(room.state.roundNo).toBeGreaterThan(50);
+  });
+});
+
+describe("Reindeer Race bonus", () => {
+  function winRound(room: RoomCore, ids: string[], now: () => number, advance: (ms: number) => void) {
+    // Shared 10,10 vs dealer 10 + 7: everyone stands on 20 and wins.
+    rig(room, ["10S", "10H", "10D", "7C"]);
+    for (const id of ids) room.placeBet(id, 100, true, now());
+    advance(TIMING.allLockedMs);
+    advance(TIMING.dealMs);
+    for (const id of ids) room.decide(id, "stand", now());
+    advance(TIMING.allDecidedMs);
+    for (let i = 0; i < 8 && room.state.phase !== "payout"; i++) advance(3000);
+    expect(room.state.phase).toBe("payout");
+  }
+
+  it("race scripts finish in the drawn order", () => {
+    for (let seed = 1; seed < 200; seed++) {
+      const rng = seededRng(seed);
+      const runners = makeRunners(rng, 1000);
+      const sc = makeScript(runners, rng);
+      const finishFrame = (id: number) => sc.progress[id]!.findIndex((v) => v >= 1);
+      for (const row of sc.progress) for (let f = 1; f < row.length; f++) expect(row[f]!).toBeGreaterThanOrEqual(row[f - 1]!);
+      const frames = sc.order.map(finishFrame);
+      expect(frames.every((f) => f >= 0)).toBe(true);
+      for (let i = 1; i < frames.length; i++) expect(frames[i]!).toBeGreaterThanOrEqual(frames[i - 1]!);
+      expect(new Set(sc.order).size).toBe(RACE_RUNNERS);
+    }
+  });
+
+  it("3 wins in a row unlock the race; the hero's prize is doubled; cooldown applies", () => {
+    const { room, ids, now, advance } = setup(2);
+    const [a, b] = ids as [string, string];
+    room.hostStart(now());
+    for (let r = 0; r < 3; r++) {
+      winRound(room, ids, now, advance);
+      if (r < 2) {
+        expect(room.state.pendingBonus ?? null).toBeNull();
+        advance(TIMING.payoutMs);
+      }
+    }
+    expect(room.state.pendingBonus).not.toBeNull();
+    advance(TIMING.payoutMs);
+    expect(room.state.phase).toBe("bonus");
+    const bonus = room.state.bonus!;
+    expect(bonus.stage).toBe("intro");
+    const heroId = bonus.hero!.playerId;
+    advance(TIMING.bonusIntroMs);
+    expect(bonus.stage).toBe("picking");
+    // Both pick the same reindeer; we'll force it to win.
+    room.bonusPick(a, 2, now());
+    room.bonusPick(b, 2, now());
+    expect(room.state.deadline! - now()).toBeLessThanOrEqual(TIMING.bonusAllPickedMs);
+    const chipsBefore = { a: room.state.players[a]!.chips, b: room.state.players[b]!.chips };
+    advance(TIMING.bonusAllPickedMs);
+    expect(bonus.stage).toBe("racing");
+    expect(() => room.bonusPick(a, 1, now())).toThrow("not_picking");
+    room.skip(now()); // ignored mid-race
+    expect(bonus.stage).toBe("racing");
+    bonus.script!.order = [2, 0, 1, 3, 4, 5];
+    advance(TIMING.raceMs);
+    expect(bonus.stage).toBe("results");
+    const prize = bonus.runners[2]!.prize;
+    const gain = (id: string) => room.state.players[id]!.chips - chipsBefore[id === a ? "a" : "b"];
+    expect(gain(heroId)).toBe(prize * 2);
+    expect(gain(heroId === a ? b : a)).toBe(prize);
+    advance(TIMING.bonusResultMs);
+    expect(room.state.phase).toBe("betting");
+    expect(room.state.bonus).toBeNull();
+    // Streak continues but the cooldown blocks an immediate second bonus.
+    winRound(room, ids, now, advance);
+    expect(room.state.pendingBonus ?? null).toBeNull();
+  });
+
+  it("host can start a race from betting, and bonuses can be switched off", () => {
+    const { room, now, advance } = setup(1);
+    room.hostStart(now());
+    room.hostBonus(now());
+    expect(room.state.phase).toBe("bonus");
+    advance(TIMING.bonusIntroMs);
+    advance(TIMING.bonusPickMs); // nobody picked → random pick assigned
+    expect(Object.keys(room.state.bonus!.picks)).toHaveLength(1);
+    expect(room.state.bonus!.stage).toBe("racing");
+    room.updateRules({ bonusGames: false }, now());
+    expect(room.state.rules.bonusGames).toBe(false);
   });
 });
