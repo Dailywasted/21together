@@ -15,6 +15,7 @@ import { getHostToken, load, save } from "../lib/storage";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
 import { unlockAudio } from "../lib/sound";
+import { setMusicMode, startMusic, stopMusic, type MusicMode } from "../lib/music";
 import { Logo } from "../components/ui";
 
 export type HostView = "arena" | "table";
@@ -66,6 +67,22 @@ export default function HostPage({ code }: { code: string }) {
       void lock?.release();
     };
   }, []);
+
+  // Lounge music that follows the game (TV only).
+  useEffect(() => {
+    startMusic();
+    return () => stopMusic();
+  }, []);
+  const musicMode: MusicMode = !snap
+    ? "off"
+    : snap.paused
+      ? "hush"
+      : snap.phase === "deciding"
+        ? "tension"
+        : snap.phase === "dealing" || snap.phase === "drawing" || snap.phase === "dealer"
+          ? "hush"
+          : "lounge";
+  useEffect(() => setMusicMode(musicMode), [musicMode]);
 
   const isHost = role === "host";
   const cmd = (c: HostCmd) => {

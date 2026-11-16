@@ -11,7 +11,7 @@ import { joinUrl } from "../lib/api";
 import { sfx } from "../lib/sound";
 import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "../lib/view";
 import { useStageWidth } from "./Stage";
-import { ChipFlights, GoldDust, LeaderWatch, Marquee, TensionGlow, stripGeometry, useMood, type Lag } from "./ArenaFx";
+import { ChipFlights, GoldDust, LeaderWatch, Marquee, stripGeometry, useMood, type Lag } from "./ArenaFx";
 
 /**
  * "Big screen" view: the stadium-style display at the front of the room.
@@ -98,7 +98,6 @@ export function Arena({ snap, offset }: { snap: PublicSnapshot; offset: number }
       <Backdrop />
       <GoldDust />
       <Marquee width={W} mood={mood} />
-      <TensionGlow snap={snap} lag={lag} />
       <AnimatePresence>
         {tint && (
           <motion.div
@@ -927,7 +926,7 @@ function Announcer({ snap, lag, jolt }: { snap: PublicSnapshot; lag: Lag; jolt: 
     if (v.bust) {
       sfx.bust();
       say({ text: takers > 1 ? `${t("BUST")} ×${takers}` : t("BUST"), tone: "lose", size: 150 });
-      jolt("rgba(251,113,133,.35)", true);
+      jolt("rgba(251,113,133,.12)");
     } else if (v.total === 21) {
       sfx.win();
       say({ text: "21!", tone: "gold", size: 170 });
@@ -950,7 +949,7 @@ function Announcer({ snap, lag, jolt }: { snap: PublicSnapshot; lag: Lag; jolt: 
       jolt("rgba(52,211,153,.35)", true);
     } else if (v.blackjack) {
       say({ text: t("dealerBlackjack"), tone: "lose", size: 110 });
-      jolt("rgba(251,113,133,.3)", true);
+      jolt("rgba(251,113,133,.1)");
     }
   }, [lag.dealer, t, jolt]);
 
@@ -1074,7 +1073,7 @@ function Celebration({ snap }: { snap: PublicSnapshot }) {
             style={{
               background: good
                 ? "radial-gradient(ellipse at 50% 42%, rgba(120,84,10,.88), rgba(3,5,6,.9) 62%)"
-                : "radial-gradient(ellipse at 50% 42%, rgba(90,18,30,.86), rgba(3,5,6,.9) 62%)",
+                : "radial-gradient(ellipse at 50% 42%, rgba(34,38,46,.9), rgba(3,5,6,.92) 62%)",
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: [0, 1, 0.92] }}

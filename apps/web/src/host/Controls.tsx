@@ -5,6 +5,7 @@ import type { HostCmd } from "@21/protocol";
 import { Avatar } from "../components/ui";
 import { useT, useLang, fmt, type TKey } from "../lib/i18n";
 import { setSoundEnabled, soundEnabled } from "../lib/sound";
+import { musicEnabled, setMusicEnabled } from "../lib/music";
 import { LangToggle } from "../components/LangToggle";
 import type { HostView } from "./HostPage";
 
@@ -36,6 +37,7 @@ export function HostControls({
   const [visible, setVisible] = useState(true);
   const [modal, setModal] = useState<Modal>(null);
   const [sound, setSound] = useState(soundEnabled());
+  const [music, setMusic] = useState(musicEnabled());
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const poke = () => {
@@ -144,6 +146,14 @@ export function HostControls({
               }}
             >
               {sound ? "🔊" : "🔇"}
+            </DockBtn>
+            <DockBtn
+              onClick={() => {
+                setMusicEnabled(!music);
+                setMusic(!music);
+              }}
+            >
+              <span className={music ? "" : "opacity-40 line-through"}>🎵 {t("music")}</span>
             </DockBtn>
             <DockBtn onClick={toggleFullscreen}>⛶</DockBtn>
             <LangToggle className="mx-1" />

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { bustProbability, type PublicSnapshot, type RoundResult } from "@21/engine";
+import type { PublicSnapshot, RoundResult } from "@21/engine";
 import { Chip } from "../components/Chip";
 import { Avatar } from "../components/ui";
 import { useT } from "../lib/i18n";
@@ -47,7 +47,7 @@ const MOOD = {
   idle: { a: "#f5c451", b: "#7a5a12", speed: 2.4, glow: 0.55 },
   tense: { a: "#ffffff", b: "#3b4a55", speed: 0.9, glow: 0.6 },
   win: { a: "#ffe08a", b: "#34d399", speed: 0.32, glow: 1 },
-  lose: { a: "#fb7185", b: "#4a1620", speed: 1.8, glow: 0.5 },
+  lose: { a: "#c9d2db", b: "#2a3138", speed: 2.2, glow: 0.35 },
 } as const;
 
 /** Chasing bulb lights around the screen, like a casino sign. Speed and colour follow the game. */
@@ -112,28 +112,6 @@ export function GoldDust() {
         />
       ))}
     </div>
-  );
-}
-
-// ───────────────────────── tension glow ─────────────────────────
-
-/** Red pulse on the screen edges when hitting is risky. */
-export function TensionGlow({ snap, lag }: { snap: PublicSnapshot; lag: Lag }) {
-  const active = snap.players.some((p) => p.hand?.status === "active");
-  const risk = snap.phase === "deciding" && active ? bustProbability(snap.shared.slice(0, lag.shared)) : 0;
-  return (
-    <AnimatePresence>
-      {risk >= 0.5 && !snap.paused && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 z-[4]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: [0.35, 0.9, 0.35] }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
-          style={{ boxShadow: `inset 0 0 ${120 + risk * 140}px rgba(251,113,133,${0.25 + risk * 0.3})` }}
-        />
-      )}
-    </AnimatePresence>
   );
 }
 

@@ -21,6 +21,12 @@ function ac(): AudioContext | null {
   }
 }
 
+/** Shared audio context + master bus (null while sound is off). Used by the music engine. */
+export function audioBus(): { ctx: AudioContext; out: GainNode } | null {
+  const c = ac();
+  return c && master ? { ctx: c, out: master } : null;
+}
+
 export function soundEnabled() {
   return enabled;
 }
