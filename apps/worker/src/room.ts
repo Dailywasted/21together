@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { RoomCore, RoomError, type RoomEvent } from "@21/engine";
 import { ClientMsg, ALLOWED_REACTIONS, type ServerMsg } from "@21/protocol";
-import { persistRounds } from "./db";
 import type { Env } from "./env";
 
 interface Attachment {
@@ -249,15 +248,11 @@ export class GameRoom extends DurableObject<Env> {
     const room = this.room!;
     if (activity && this.meta) this.meta.lastActivity = now;
     const events = room.takeEvents();
-    const completed = room.takeCompleted();
+    // Finished rounds are not stored outside the room. To add all-time stats later, write these to Cloudflare D1.
+    room.takeCompleted();
     await this.save();
     await this.scheduleAlarm();
     this.broadcastState(now, events);
-    if (completed.length > 0 && this.env.DATABASE_URL) {
-      this.ctx.waitUntil(
-        persistRounds(this.env.DATABASE_URL, room.state.code, completed).catch((e) => console.error("persist failed", e)),
-      );
-    }
   }
 
   private async save(): Promise<void> {

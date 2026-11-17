@@ -1,5 +1,4 @@
 import type { CreateRoomResponse } from "@21/protocol";
-import { globalLeaderboard, playerStats } from "./db";
 import type { Env } from "./env";
 
 export { GameRoom } from "./room";
@@ -75,17 +74,6 @@ export default {
         const code = wsMatch[1]!.toUpperCase();
         if (!CODE_RE.test(code)) return json({ error: "bad_code" }, 400);
         return stub(env, code).fetch("https://room/ws", request);
-      }
-
-      if (path === "/api/leaderboard" && request.method === "GET") {
-        if (!env.DATABASE_URL) return json({ players: [] });
-        return json({ players: await globalLeaderboard(env.DATABASE_URL) }, 200, { "Cache-Control": "public, max-age=30" });
-      }
-
-      const statsMatch = path.match(/^\/api\/players\/([A-Za-z0-9_-]{8,64})\/stats$/);
-      if (statsMatch && request.method === "GET") {
-        if (!env.DATABASE_URL) return json({ stats: null });
-        return json({ stats: await playerStats(env.DATABASE_URL, statsMatch[1]!) });
       }
 
       return json({ error: "not_found" }, 404);

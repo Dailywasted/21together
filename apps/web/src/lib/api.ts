@@ -1,4 +1,4 @@
-import type { CreateRoomResponse, GlobalPlayerStats, RoomInfoResponse } from "@21/protocol";
+import type { CreateRoomResponse, RoomInfoResponse } from "@21/protocol";
 import type { RoundSummary } from "@21/engine";
 
 /**
@@ -31,8 +31,6 @@ export const api = {
   roomInfo: (code: string) => req<RoomInfoResponse>(`/api/rooms/${code}`),
   history: (code: string, offset = 0, limit = 20) =>
     req<{ rounds: RoundSummary[]; total: number }>(`/api/rooms/${code}/history?offset=${offset}&limit=${limit}`),
-  leaderboard: () => req<{ players: GlobalPlayerStats[] }>("/api/leaderboard"),
-  playerStats: (deviceId: string) => req<{ stats: GlobalPlayerStats | null }>(`/api/players/${deviceId}/stats`),
 };
 
 /** The URL players scan to join. */

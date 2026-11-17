@@ -44,4 +44,4 @@ pause/resume can freeze any timed phase. "end" → ended (awards screen).
 
 ## Persistence
 - Live state lives in the Cloudflare Durable Object (one per room), saved after every change.
-- Finished rounds and player stats are written to Neon Postgres (players are keyed by a device id, so stats carry across parties).
+- Nothing is stored outside the room: stats and history last for the night. If all-time stats are added later, they would go in Cloudflare D1 (players keyed by their device id, so stats carry across parties).

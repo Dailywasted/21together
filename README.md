@@ -57,7 +57,7 @@ Check that it works: opening the game server address should show `{"ok":true,"se
 - **First Cloudflare deploy ever:** Wrangler may ask you to pick a `workers.dev` subdomain. Pick anything; it becomes part of the URL.
 - **Keep the worker names** `21together` (web, `apps/web/wrangler.jsonc`) and `21together-api` (server, `apps/worker/wrangler.jsonc`). The website finds the server by that naming rule. If you rename them or use a custom domain, create `apps/web/.env.production` with `VITE_API_URL=https://<your-game-server-url>` and run `npm run deploy:web` again.
 - **Deploy the worker first.** It contains the Durable Object (`GameRoom`, SQLite-backed, allowed on the free plan) that runs each table.
-- **No database needed.** Games, chips, history and in-room stats live in the Durable Object. The optional Neon Postgres database only adds an all-time leaderboard across parties (see [Optional: all-time stats](#optional-all-time-stats-neon)). Skip it.
+- **No database.** Games, chips, history and stats live in the Durable Object and last for the night. Nothing else to set up.
 - **Free plan limits** (100k requests/day) are far above what a party uses: the game talks over WebSockets, which count very little.
 - **Test before the party:** open the website on a laptop, click **Host a table**, then scan the QR code with two or three phones and play a round.
 - **Updating later:** `git pull`, then run both deploy commands again.
@@ -94,6 +94,7 @@ Views:
 - **Table**: the original top-down felt table with chairs around the arc.
 
 Good to know:
+- The TV always goes first: phones show a new card about 1.5 s after the TV flips it, so everyone watches the big screen and reacts together. Tune it in `apps/web/src/lib/pace.ts`.
 - 12 seats max. Extra people wait "on the rail" and get the next free seat.
 - If a phone locks or drops Wi-Fi, opening the page again puts the player back in the same seat with the same chips.
 - If the TV page reloads, it stays the host: the host key is saved in that browser.
@@ -117,7 +118,7 @@ Full spec: [docs/GAME_SPEC.md](docs/GAME_SPEC.md).
 | `packages/protocol` | zod schemas for WebSocket messages |
 | `apps/worker` | Cloudflare Worker + `GameRoom` Durable Object (WebSocket Hibernation, alarms for timers) |
 | `apps/web` | React 19, Vite, Tailwind v4, Motion. Deployed as Cloudflare static assets (Pages on Workers) |
-| Database (optional) | Neon Postgres: rounds, hands, all-time player stats across parties |
+| Storage | Durable Object storage only (per room, for the night). If all-time stats are ever added, they would use [Cloudflare D1](https://developers.cloudflare.com/d1/), so everything stays on Cloudflare's free plan. |
 
 The deck lives only on the server, so phones never see upcoming cards.
 
@@ -126,7 +127,7 @@ The deck lives only on the server, so phones never see upcoming cards.
 ```bash
 npm install
 npm test                       # engine unit tests (rules, room state machine, 100k-round sim, fuzz)
-npm run dev:worker             # http://localhost:8787  (needs apps/worker/.dev.vars with DATABASE_URL, optional)
+npm run dev:worker             # http://localhost:8787
 npm run dev:web                # http://localhost:5173  (phones on the same Wi-Fi can use http://<laptop-ip>:5173)
 
 node scripts/bots.mjs http://localhost:8787 13 3     # 13 bots play 3 rounds (load test)
@@ -138,11 +139,3 @@ python scripts/frame.py screenshots/readme/iphone-join.png docs/images/iphone-jo
 ```
 
 Deploy: see [Host your own copy](#host-your-own-copy-about-10-minutes).
-
-### Optional: all-time stats (Neon)
-
-Only needed if you want a leaderboard that survives across parties. Everything else works without it.
-
-1. Create a free Postgres database at https://neon.tech and copy its connection string.
-2. Apply the tables: put `DATABASE_URL="postgres://..."` in `apps/worker/.dev.vars`, then `cd apps/worker && npm run migrate`.
-3. Give it to the deployed server: `cd apps/worker && npx wrangler secret put DATABASE_URL` (paste the same string).

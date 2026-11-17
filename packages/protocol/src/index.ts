@@ -76,19 +76,4 @@ export interface RoomInfoResponse {
   seats?: number;
 }
 
-export interface GlobalPlayerStats {
-  deviceId?: string;
-  name: string;
-  avatar: string;
-  hands: number;
-  wins: number;
-  losses: number;
-  pushes: number;
-  blackjacks: number;
-  busts: number;
-  net: number;
-  biggestWin: number;
-  parties: number;
-}
-
 export type { PublicSnapshot, PrivateView, RoomEvent, Rules };

@@ -1,22 +1,16 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { ACHIEVEMENTS, ACHIEVEMENT_ICONS, type PublicSnapshot, type PrivateView, type RoundSummary } from "@21/engine";
-import type { GlobalPlayerStats } from "@21/protocol";
 import { Avatar, signed } from "../components/ui";
 import { MiniCard } from "../components/PlayingCard";
 import { useT, useLang, fmt, type TKey } from "../lib/i18n";
 import { api } from "../lib/api";
-import { deviceId } from "../lib/storage";
 
 export function StatsTab({ me }: { me: PrivateView }) {
   const t = useT();
   const lang = useLang((s) => s.lang);
   const f = (n: number) => fmt(n, lang);
   const s = me.stats;
-  const [global, setGlobal] = useState<GlobalPlayerStats | null>(null);
-  useEffect(() => {
-    api.playerStats(deviceId()).then((r) => setGlobal(r.stats)).catch(() => {});
-  }, [s.hands]);
   const winRate = s.hands ? Math.round((s.wins / s.hands) * 100) : 0;
   const tiles: [TKey, string, string?][] = [
     ["hands", f(s.hands)],
@@ -66,28 +60,6 @@ export function StatsTab({ me }: { me: PrivateView }) {
         </div>
       </section>
 
-      {global && global.hands > 0 && (
-        <section>
-          <h3 className="mb-2 text-xs font-bold tracking-[0.25em] text-white/50 uppercase">{t("allTime")}</h3>
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                ["hands", f(global.hands)],
-                ["winRate", `${Math.round((global.wins / global.hands) * 100)}%`],
-                ["net", signed(global.net, f)],
-                ["blackjacks", f(global.blackjacks)],
-                ["busts", f(global.busts)],
-                ["biggestWin", f(global.biggestWin)],
-              ] as [TKey, string][]
-            ).map(([k, v]) => (
-              <div key={k} className="rounded-2xl bg-white/[.03] p-3">
-                <div className="text-[10px] font-bold tracking-wider text-white/45 uppercase">{t(k)}</div>
-                <div className="tabular mt-1 font-display text-lg font-bold">{v}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }
@@ -176,27 +148,11 @@ export function BoardTab({ snap, playerId }: { snap: PublicSnapshot; playerId: s
   const t = useT();
   const lang = useLang((s) => s.lang);
   const f = (n: number) => fmt(n, lang);
-  const [mode, setMode] = useState<"night" | "all">("night");
-  const [global, setGlobal] = useState<GlobalPlayerStats[] | null>(null);
-  useEffect(() => {
-    if (mode === "all" && !global) api.leaderboard().then((r) => setGlobal(r.players)).catch(() => setGlobal([]));
-  }, [mode, global]);
   return (
     <div>
-      <div className="glass mb-3 inline-flex rounded-full p-1 text-sm font-bold">
-        {(["night", "all"] as const).map((m) => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`btn-press rounded-full px-4 py-1.5 ${mode === m ? "bg-white text-ink" : "text-muted"}`}
-          >
-            {t(m === "night" ? "thisNight" : "allTime")}
-          </button>
-        ))}
-      </div>
+      <h3 className="mb-3 text-xs font-bold tracking-[0.25em] text-white/50 uppercase">{t("thisNight")}</h3>
       <ol className="flex flex-col gap-1.5">
-        {mode === "night"
-          ? snap.leaderboard.map((p, i) => (
+        {snap.leaderboard.map((p, i) => (
               <motion.li
                 layout
                 key={p.id}
@@ -212,21 +168,7 @@ export function BoardTab({ snap, playerId }: { snap: PublicSnapshot; playerId: s
                 </div>
                 <span className={`tabular font-bold ${p.net > 0 ? "text-win" : p.net < 0 ? "text-lose" : "text-white/40"}`}>{signed(p.net, f)}</span>
               </motion.li>
-            ))
-          : (global ?? []).map((p, i) => (
-              <li key={i} className="flex items-center gap-3 rounded-2xl bg-white/[.04] px-3 py-2">
-                <span className={`tabular w-6 text-center font-display font-bold ${i === 0 ? "text-gold" : "text-white/50"}`}>{i + 1}</span>
-                <Avatar emoji={p.avatar} seed={p.name} size={36} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{p.name}</div>
-                  <div className="tabular text-xs text-white/45">
-                    {f(p.hands)} {t("hands").toLowerCase()} · {p.hands ? Math.round((p.wins / p.hands) * 100) : 0}%
-                  </div>
-                </div>
-                <span className={`tabular font-bold ${p.net > 0 ? "text-win" : p.net < 0 ? "text-lose" : "text-white/40"}`}>{signed(p.net, f)}</span>
-              </li>
             ))}
-        {mode === "all" && global === null && <li className="py-10 text-center text-muted">…</li>}
       </ol>
     </div>
   );

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { ClientMsg, ServerMsg, PublicSnapshot, PrivateView, RoomEvent } from "@21/protocol";
 import { WS_BASE } from "./api";
 import { deviceId } from "./storage";
+import { phoneLag } from "./pace";
 
 export type ConnStatus = "idle" | "connecting" | "open" | "reconnecting" | "closed";
 type Role = "player" | "host" | "spectator";
@@ -44,6 +45,25 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 let wanted: { code: string; role: Role; hostToken?: string } | null = null;
 let queue: string[] = [];
 
+/**
+ * Phones hold back updates that reveal a card (or a result) until the TV has shown it, so the whole room
+ * reacts to the big screen first. Updates are applied in order; anything else goes through immediately
+ * unless an earlier held update is still waiting.
+ */
+let lastReceived: PublicSnapshot | null = null;
+let releaseAt = 0;
+function deliver(lag: number, apply: () => void) {
+  const at = Math.max(Date.now() + lag, releaseAt);
+  releaseAt = at;
+  const wait = at - Date.now();
+  if (wait <= 0) apply();
+  else setTimeout(apply, wait);
+}
+function resetDelivery() {
+  lastReceived = null;
+  releaseAt = 0;
+}
+
 export const useGame = create<GameStore>((set, get) => {
   function open() {
     if (!wanted) return;
@@ -51,6 +71,7 @@ export const useGame = create<GameStore>((set, get) => {
     set({ status: retry === 0 ? "connecting" : "reconnecting" });
     const sock = new WebSocket(`${WS_BASE}/ws/${code}`);
     ws = sock;
+    resetDelivery();
     sock.onopen = () => {
       retry = 0;
       set({ status: "open", notFound: false });
@@ -75,13 +96,24 @@ export const useGame = create<GameStore>((set, get) => {
         case "state": {
           const offset = msg.s.serverNow - Date.now();
           const prev = get().clockOffset;
-          // Use the smaller latency-inflated estimate; pong gives a better RTT-corrected value.
-          set({ snap: msg.s, me: msg.me, clockOffset: prev === 0 ? offset : prev, playerId: msg.me?.playerId ?? get().playerId });
+          if (prev === 0) set({ clockOffset: offset });
+          const lag = get().role === "player" ? phoneLag(lastReceived, msg.s) : 0;
+          lastReceived = msg.s;
+          const { s: snap, me } = msg;
+          deliver(lag, () => {
+            if (ws !== sock) return;
+            set({ snap, me, playerId: me?.playerId ?? get().playerId });
+          });
           break;
         }
-        case "events":
-          for (const e of msg.e) for (const l of eventListeners) l(e);
+        case "events": {
+          const events = msg.e;
+          deliver(0, () => {
+            if (ws !== sock) return;
+            for (const e of events) for (const l of eventListeners) l(e);
+          });
           break;
+        }
         case "react":
           for (const l of reactListeners) l(msg.playerId, msg.emoji);
           break;

@@ -13,6 +13,7 @@ import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "
 import { useStageWidth } from "./Stage";
 import { StreakMeter } from "../components/StreakMeter";
 import { ChipFlights, GoldDust, LeaderWatch, Marquee, stripGeometry, useMood, type Lag } from "./ArenaFx";
+import { REVEAL } from "../lib/pace";
 
 /**
  * "Big screen" view: the stadium-style display at the front of the room.
@@ -26,12 +27,10 @@ const SIDE_W = 360;
 const DEALER_W = 150;
 const SHARED_W = 176;
 
-/** How long after a card lands its value is "revealed" (totals, busts, badges) — matches the flip animations. */
-const REVEAL = { dealShared: 2700, dealDealer: 1700, draw: 2150, dealer: 1950 };
 
 /**
  * Party pace (seconds). Cards land, sit face down for a beat of suspense, then turn.
- * Must stay in sync with REVEAL above and TIMING in the engine.
+ * Must stay in sync with REVEAL (lib/pace.ts) and TIMING in the engine.
  */
 const PACE = {
   deal: [0, 0.6, 1.2, 1.8] as const, // shared #1, dealer up, shared #2, dealer hole
