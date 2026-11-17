@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 const [, , WEB = "http://localhost:5173", PHONES = "4", LANG = "en"] = process.argv;
 const OUT = "screenshots";
 mkdirSync(OUT, { recursive: true });
-const NAMES = ["Gab", "Sophie", "Max", "Léa", "Olivier", "Camille", "Jules", "Emma", "Noah", "Zoé", "Félix", "Rose", "Theo"];
+const NAMES = ["Alex", "Sophie", "Max", "Léa", "Olivier", "Camille", "Jules", "Emma", "Noah", "Zoé", "Félix", "Rose", "Theo"];
 
 const browser = await chromium.launch();
 const errors = [];

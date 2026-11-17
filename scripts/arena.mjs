@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 const [, , WEB = "http://localhost:5173", PHONES = "8", LANG = "en", WIDTH = "1920"] = process.argv;
 const OUT = "screenshots/arena";
 mkdirSync(OUT, { recursive: true });
-const NAMES = ["Gab", "Sophie", "Max", "Léa", "Olivier", "Camille", "Jules", "Emma", "Noah", "Zoé", "Félix", "Rose"];
+const NAMES = ["Alex", "Sophie", "Max", "Léa", "Olivier", "Camille", "Jules", "Emma", "Noah", "Zoé", "Félix", "Rose"];
 const browser = await chromium.launch();
 const errors = [];
 const init = `try { localStorage.setItem("21t:lang", JSON.stringify("${LANG}")); localStorage.setItem("21t:sound", "false"); localStorage.removeItem("21t:view"); } catch {}`;

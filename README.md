@@ -3,6 +3,16 @@
 Shared-hand multiplayer blackjack for parties. One table on the TV, everyone plays from their phone.
 Everyone gets **the same cards**, and each player decides on their own to **hit, stand or double**.
 
+<p align="center">
+  <img src="docs/images/big-screen.jpg" alt="The TV view after a round: shared cards, dealer bust, leaderboard, seats and confetti" width="100%">
+</p>
+<p align="center">
+  <img src="docs/images/phone.jpg" alt="A player placing a bet on their phone" height="340">
+  &nbsp;
+  <img src="docs/images/reindeer-race.jpg" alt="The Reindeer Race bonus round on the TV" height="340">
+</p>
+<p align="center"><em>The TV (top), a guest's phone (left) and the Reindeer Race bonus round (right).</em></p>
+
 It runs for free on Cloudflare's free plan (Workers + Durable Objects). No database, no paid service, no account other than Cloudflare.
 
 ## Host your own copy (about 10 minutes)
