@@ -13,15 +13,13 @@ Everyone gets **the same cards**, and each player decides on their own to **hit,
 </p>
 <p align="center"><em>The TV (top), a guest's phone (left) and the Reindeer Race bonus round (right).</em></p>
 
-It runs for free on Cloudflare's free plan (Workers + Durable Objects). No database, no paid service, no account other than Cloudflare.
-
 ## Host your own copy (about 10 minutes)
 
 > **Using Claude Code?** Open this folder in Claude Code and say:
 > *"Read the README and deploy 21Together to my Cloudflare account."*
 > Claude will follow the steps below. You only need to log in to Cloudflare in the browser when asked.
 
-**You need:** a free Cloudflare account (https://dash.cloudflare.com/sign-up), [Node.js](https://nodejs.org) 22 or newer, and git.
+**You need:** a free [Cloudflare account](https://dash.cloudflare.com/sign-up), [Node.js](https://nodejs.org) 22 or newer, and git. The free plan is enough: no database or paid service required.
 
 ```bash
 # 1. Get the code and install
