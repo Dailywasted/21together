@@ -10,4 +10,8 @@ playwright-report/
 screenshots/
 .plan-attestation
 dev-*.log
-!apps/web/.env.production
+
+# Personal planning notes (kept locally, not shared)
+findings.md
+progress.md
+task_plan.md
