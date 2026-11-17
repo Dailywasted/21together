@@ -4,14 +4,23 @@ Shared-hand multiplayer blackjack for parties. One table on the TV, everyone pla
 Everyone gets **the same cards**, and each player decides on their own to **hit, stand or double**.
 
 <p align="center">
-  <img src="docs/images/big-screen.jpg" alt="The TV view after a round: shared cards, dealer bust, leaderboard, seats and confetti" width="100%">
+  <img src="docs/images/home.jpg" alt="Home page: Host a table on the TV, or join with a room code" width="100%">
+  <br><em>1. Open the site on the TV and click <b>Host a table</b>.</em>
 </p>
 <p align="center">
-  <img src="docs/images/phone.jpg" alt="A player placing a bet on their phone" height="340">
-  &nbsp;
-  <img src="docs/images/reindeer-race.jpg" alt="The Reindeer Race bonus round on the TV" height="340">
+  <img src="docs/images/iphone-join.png" alt="Joining from an iPhone: pick a name and an avatar" height="460">
+  &nbsp;&nbsp;
+  <img src="docs/images/iphone-play.png" alt="Playing from an iPhone: hit, stand or double" height="460">
+  <br><em>2. Guests scan the QR code, pick a name and an avatar, and play from their phone. No app to install.</em>
 </p>
-<p align="center"><em>The TV (top), a guest's phone (left) and the Reindeer Race bonus round (right).</em></p>
+<p align="center">
+  <img src="docs/images/big-screen.jpg" alt="The TV after a round: shared cards, dealer bust, leaderboard, seats and confetti" width="100%">
+  <br><em>3. The TV shows the shared cards, the dealer, every seat and the live leaderboard.</em>
+</p>
+<p align="center">
+  <img src="docs/images/reindeer-race.jpg" alt="The Reindeer Race bonus round on the TV" width="100%">
+  <br><em>Bonus: win 3 hands in a row and everyone picks a reindeer for free in the Reindeer Race.</em>
+</p>
 
 ## Host your own copy (about 10 minutes)
 
@@ -124,6 +133,8 @@ node scripts/bots.mjs http://localhost:8787 13 3     # 13 bots play 3 rounds (lo
 node scripts/e2e.mjs http://localhost:5173           # reconnect / kick / not-found checks
 node scripts/shots.mjs http://localhost:5173 12 fr   # screenshots of every phase → screenshots/
 node scripts/arena.mjs http://localhost:5173 8 en 2560   # big-screen step-mode walkthrough → screenshots/arena/
+node scripts/readme-shots.mjs http://localhost:5173      # raw iPhone shots for the README → screenshots/readme/
+python scripts/frame.py screenshots/readme/iphone-join.png docs/images/iphone-join.png   # add the iPhone frame (needs Pillow)
 ```
 
 Deploy: see [Host your own copy](#host-your-own-copy-about-10-minutes).
