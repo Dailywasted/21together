@@ -1,11 +1,11 @@
 import { memo } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { handValue, type Card, type PublicPlayer, type PublicSnapshot } from "@21/engine";
+import { handValue, type Card, type HandRow, type PublicPlayer, type PublicSnapshot } from "@21/engine";
 import { PlayingCard } from "../components/PlayingCard";
 import { ChipStack } from "../components/Chip";
 import { Avatar } from "../components/ui";
 import { useT, useLang, fmt } from "../lib/i18n";
-import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel } from "../lib/view";
+import { handsOf, rowOf, seatBadge, TONE_CLASSES, TONE_RING, totalLabel } from "../lib/view";
 import { StreakMeter } from "../components/StreakMeter";
 import { useCardSize } from "../lib/cardSize";
 
@@ -169,32 +169,61 @@ export function DealerHand({ snap }: { snap: PublicSnapshot }) {
 
 interface StopGroup {
   stopAt: number;
-  players: PublicPlayer[];
+  players: { p: PublicPlayer; h: NonNullable<PublicPlayer["hand"]> }[];
 }
 
 export function SharedRow({ snap }: { snap: PublicSnapshot }) {
   const jumbo = useCardSize((c) => c.size) !== "normal";
-  const n = snap.shared.length;
-  if (n === 0) return null;
-  const width = (n - 1) * SHARED_STEP + SHARED_CARD_W;
-  const left = CX - width / 2;
-  const inHand = snap.players.filter((p) => p.hand);
-  const groups: StopGroup[] = [];
-  for (const p of inHand) {
-    const g = groups.find((x) => x.stopAt === p.hand!.stopAt);
-    if (g) g.players.push(p);
-    else groups.push({ stopAt: p.hand!.stopAt, players: [p] });
-  }
-  const newCard = snap.phase === "drawing" && snap.lastStep?.card ? n - 1 : -1;
+  if (snap.shared.length === 0) return null;
+  if (!snap.splitRows) return <CardRow snap={snap} row={0} cx={CX} cardW={SHARED_CARD_W} step={SHARED_STEP} jumbo={jumbo} />;
+  // After a split: hands side by side (the shared row only if someone still plays it).
+  const rows: HandRow[] = handsOf(snap).some(({ h }) => h.row === 0) ? [0, 1, 2] : [1, 2];
+  const span = rows.length === 3 ? 470 : 520;
   return (
     <>
-      {snap.shared.map((c, i) => (
-        <div key={`${snap.roundNo}-s${i}`} className="absolute" style={{ left: left + i * SHARED_STEP, top: SHARED_Y }}>
+      {rows.map((row, i) => (
+        <CardRow
+          key={row}
+          snap={snap}
+          row={row}
+          cx={CX + (i - (rows.length - 1) / 2) * span}
+          cardW={104}
+          step={62}
+          jumbo={jumbo}
+        />
+      ))}
+    </>
+  );
+}
+
+function CardRow({ snap, row, cx, cardW, step, jumbo }: { snap: PublicSnapshot; row: HandRow; cx: number; cardW: number; step: number; jumbo: boolean }) {
+  const cards = rowOf(snap, row);
+  const n = cards.length;
+  const width = (n - 1) * step + cardW;
+  const left = cx - width / 2;
+  const groups: StopGroup[] = [];
+  for (const { p, h } of handsOf(snap)) {
+    if (h.row !== row) continue;
+    const g = groups.find((x) => x.stopAt === h.stopAt);
+    if (g) g.players.push({ p, h });
+    else groups.push({ stopAt: h.stopAt, players: [{ p, h }] });
+  }
+  const drewHere = snap.phase === "drawing" && (snap.lastStep?.rowCards ?? (snap.lastStep?.card ? [{ row: 0 }] : [])).some((x) => x.row === row);
+  const newCard = drewHere ? n - 1 : -1;
+  return (
+    <>
+      {row !== 0 && (
+        <div className="absolute -translate-x-1/2 text-sm font-bold tracking-[0.25em] text-accent uppercase" style={{ left: cx, top: SHARED_Y - 34 }}>
+          ✌️ {row === 1 ? "1" : "2"}
+        </div>
+      )}
+      {cards.map((c, i) => (
+        <div key={`${snap.roundNo}-r${row}-${i}`} className="absolute" style={{ left: left + i * step, top: SHARED_Y }}>
           <PlayingCard
             card={c}
-            width={SHARED_CARD_W}
+            width={cardW}
             jumbo={jumbo}
-            dealFrom={{ x: SHOE_POS.x - (left + i * SHARED_STEP), y: SHOE_POS.y - SHARED_Y - 80 }}
+            dealFrom={row !== 0 && i === 0 ? null : { x: SHOE_POS.x - (left + i * step), y: SHOE_POS.y - SHARED_Y - 80 }}
             delay={snap.phase === "dealing" ? (i === 0 ? 0 : i === 1 ? 0.5 : 0) : 0.05}
             glow={i === newCard ? "gold" : null}
           />
@@ -203,31 +232,31 @@ export function SharedRow({ snap }: { snap: PublicSnapshot }) {
       {/* stop markers */}
       {groups.map((g) => {
         const idx = g.stopAt - 1;
-        const x = left + idx * SHARED_STEP + SHARED_CARD_W / 2;
-        const cards = snap.shared.slice(0, g.stopAt);
-        const v = handValue(cards);
-        const active = g.players.some((p) => p.hand!.status === "active");
+        const x = left + idx * step + cardW / 2;
+        const handCards = cards.slice(0, g.stopAt);
+        const v = handValue(handCards);
+        const active = g.players.some(({ h }) => h.status === "active");
         const shown = g.players.slice(0, 4);
         const extra = g.players.length - shown.length;
         return (
           <motion.div
-            key={`g${g.stopAt}`}
+            key={`g${row}-${g.stopAt}`}
             layout
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="absolute flex flex-col items-center"
-            style={{ left: x, top: SHARED_Y + SHARED_CARD_W * 1.4 + 14, transform: "translateX(-50%)" }}
+            style={{ left: x, top: SHARED_Y + cardW * 1.4 + 14, transform: "translateX(-50%)" }}
           >
             <div
               className={`tabular mb-1.5 rounded-full px-3 py-0.5 font-display text-xl font-bold ${
                 v.bust ? "bg-lose text-ink" : v.total === 21 ? "bg-gold text-ink" : active ? "bg-white text-ink" : "bg-black/55 text-white"
               }`}
             >
-              {v.bust ? `${v.total} ✕` : active ? totalLabel(cards) : v.total}
+              {v.bust ? `${v.total} ✕` : active ? totalLabel(handCards) : v.total}
             </div>
             <div className="flex items-center">
-              {shown.map((p, i) => (
-                <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -12, opacity: p.hand!.status === "busted" ? 0.45 : 1 }}>
+              {shown.map(({ p, h }, i) => (
+                <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -12, opacity: h.status === "busted" ? 0.45 : h.status === "waiting" ? 0.6 : 1 }}>
                   <Avatar emoji={p.avatar} seed={p.id} size={34} ring={active ? "#ffffff" : undefined} />
                 </div>
               ))}
@@ -325,7 +354,7 @@ export function Seats({ snap }: { snap: PublicSnapshot }) {
       {snap.seats.map((id, i) => {
         const p = id ? byId.get(id) : undefined;
         if (!p) return null;
-        const stake = p.hand ? p.hand.bet : p.bet;
+        const stake = p.hand ? p.hand.bet + (p.hand2?.bet ?? 0) : p.bet;
         return <SeatStake key={`stake-${id}`} pos={positions[i]!} amount={stake} round={snap.roundNo} />;
       })}
     </>

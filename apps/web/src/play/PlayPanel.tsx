@@ -8,16 +8,15 @@ import { CountdownRing, useNow } from "../components/ui";
 import { useT, useLang, fmt } from "../lib/i18n";
 import { timeLeft, useGame } from "../lib/store";
 import { haptic, sfx } from "../lib/sound";
-import { totalLabel } from "../lib/view";
+import { activeHand, roundOutcome, rowOf, totalLabel } from "../lib/view";
 import { BonusPanel } from "./BonusPanel";
 
 const CHIP_VALUES = [10, 25, 100, 500];
 
 export function PlayPanel({ snap, me, player }: { snap: PublicSnapshot; me: PrivateView; player: PublicPlayer }) {
-  const h = player.hand;
   const busy =
     (snap.phase === "betting" && player.seat !== null && !player.betLocked && player.chips >= snap.rules.minBet) ||
-    (snap.phase === "deciding" && h?.status === "active") ||
+    (snap.phase === "deciding" && !!activeHand(player)) ||
     (snap.phase === "bonus" && (snap.bonus?.stage === "picking" || snap.bonus?.stage === "intro"));
   return (
     <div className="flex flex-1 flex-col gap-3">
@@ -32,9 +31,10 @@ function MiniTable({ snap, player }: { snap: PublicSnapshot; player: PublicPlaye
   const t = useT();
   const h = player.hand;
   const dealerVisible = snap.dealer.filter((c): c is Card => !!c);
-  const myCards = h ? snap.shared.slice(0, h.stopAt) : [];
+  const myCards = h ? rowOf(snap, h.row).slice(0, h.stopAt) : [];
   const v = handValue(myCards);
   if (snap.shared.length === 0) return null;
+  const split = !!(h && player.hand2);
   // Overlap cards when the row gets long so it always fits on one line.
   const n = snap.shared.length;
   const handW = 50;
@@ -53,6 +53,9 @@ function MiniTable({ snap, player }: { snap: PublicSnapshot; player: PublicPlaye
           <span className="tabular rounded-full bg-black/40 px-2.5 py-0.5 font-display text-base font-bold">{snap.dealer.every(Boolean) && snap.dealer.length >= 2 ? handValue(dealerVisible).total : totalLabel(dealerVisible)}</span>
         )}
       </div>
+      {split ? (
+        [h!, player.hand2!].map((x, i) => <SplitHandLine key={i} snap={snap} hand={x} label={t(i === 0 ? "hand1" : "hand2")} />)
+      ) : (
       <div className="relative mt-3 flex items-center gap-3">
         <span className="w-14 shrink-0 text-[10px] font-bold tracking-[0.2em] text-white/50 uppercase">{t("yourHand")}</span>
         <div className="relative flex-1" style={{ height: handW * 1.4 }}>
@@ -75,6 +78,34 @@ function MiniTable({ snap, player }: { snap: PublicSnapshot; player: PublicPlaye
           </motion.span>
         )}
       </div>
+      )}
+    </div>
+  );
+}
+
+/** One of the two hands after a split; the hand being played is highlighted. */
+function SplitHandLine({ snap, hand, label }: { snap: PublicSnapshot; hand: NonNullable<PublicPlayer["hand"]>; label: string }) {
+  const cards = rowOf(snap, hand.row);
+  const mine = cards.slice(0, hand.stopAt);
+  const v = handValue(mine);
+  const w = 32;
+  const step = cards.length <= 6 ? w + 4 : Math.max(20, (250 - w) / (cards.length - 1));
+  const playing = hand.status === "active";
+  return (
+    <div className={`relative mt-1.5 flex items-center gap-3 rounded-2xl px-1 py-0.5 ${playing ? "bg-white/[.07] ring-1 ring-gold/50" : hand.status === "waiting" ? "opacity-60" : ""}`}>
+      <span className="w-14 shrink-0 whitespace-nowrap text-[10px] font-bold tracking-[0.12em] text-accent uppercase">{label}</span>
+      <div className="relative flex-1" style={{ height: w * 1.4 }}>
+        {cards.map((c, i) => (
+          <div key={`${snap.roundNo}-r${hand.row}-${i}`} className="absolute top-0" style={{ left: i * step }}>
+            <PlayingCard card={c} width={w} dealFrom={i === 0 ? null : { x: 100, y: -120 }} dim={i >= hand.stopAt} />
+          </div>
+        ))}
+      </div>
+      {mine.length > 1 && (
+        <span className={`tabular rounded-full px-2.5 py-0.5 font-display text-base font-bold ${v.bust ? "bg-lose text-ink" : v.total === 21 ? "bg-gold text-ink" : "bg-white text-ink"}`}>
+          {v.bust ? `${v.total}✕` : playing ? totalLabel(mine) : v.total}
+        </span>
+      )}
     </div>
   );
 }
@@ -103,12 +134,17 @@ function ActionArea({ snap, me, player }: { snap: PublicSnapshot; me: PrivateVie
     return <BetPanel snap={snap} me={me} player={player} />;
   }
   if (!h) return <InfoCard icon="👀" title={t("notInRound")} body={t("watchTv")} />;
-  if (snap.phase === "deciding" && h.status === "active") return <DecisionPanel snap={snap} me={me} player={player} />;
-  if (snap.phase === "payout" && h.outcome) return <ResultCard player={player} />;
+  if (snap.phase === "deciding" && activeHand(player)) return <DecisionPanel snap={snap} me={me} player={player} />;
+  if (snap.phase === "payout" && roundOutcome(player)) return <ResultCard player={player} />;
 
-  const cards = snap.shared.slice(0, h.stopAt);
+  const cards = rowOf(snap, h.row).slice(0, h.stopAt);
   const total = handValue(cards).total;
   let title = t("watchTv");
+  const stake = h.bet + (player.hand2?.bet ?? 0);
+  // After a split, the first hand is done and the second waits its turn.
+  if (player.hand2?.status === "waiting" && h.status !== "active") {
+    return <InfoCard icon="✌️" title={t("waitingHand2")} body={`${t("bet")} ${fmt(stake, lang)}`} />;
+  }
   if (h.status === "busted") title = t("youBusted", { n: total });
   else if (h.status === "doubled") title = t("youDoubled", { n: total });
   else if (h.status === "blackjack") title = t("youBJ");
@@ -117,7 +153,7 @@ function ActionArea({ snap, me, player }: { snap: PublicSnapshot; me: PrivateVie
     const d = snap.lastStep.revealed[player.id];
     if (d) title = t("youChose", { x: t(d.toUpperCase() as "HIT") });
   }
-  return <InfoCard icon={h.status === "busted" ? "💥" : "🃏"} title={title} body={`${t("bet")} ${fmt(h.bet, lang)}`} />;
+  return <InfoCard icon={h.status === "busted" ? "💥" : "🃏"} title={title} body={`${t("bet")} ${fmt(stake, lang)}`} />;
 }
 
 function InfoCard({ icon, title, body }: { icon: string; title: string; body?: string }) {
@@ -259,8 +295,8 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
   const send = useGame((s) => s.send);
   const left = useCountdown(snap);
   const pending = me.pending;
-  const decide = (action: "hit" | "stand" | "double") => {
-    haptic(action === "double" ? [20, 40, 20] : 18);
+  const decide = (action: "hit" | "stand" | "double" | "split") => {
+    haptic(action === "double" || action === "split" ? [20, 40, 20] : 18);
     sfx.lock();
     send({ t: "decide", action });
   };
@@ -278,6 +314,7 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
     <div className="glass flex flex-1 flex-col rounded-3xl p-5">
       <div className="flex items-center justify-between">
         <div>
+          {me.playing && <div className="text-xs font-bold tracking-[0.2em] text-accent uppercase">✌️ {t("playingHand", { n: me.playing })}</div>}
           <div className="font-display text-2xl font-bold">{t("phase_deciding")}</div>
           <div className="mt-0.5 text-sm text-muted">
             {t("bustRisk")}{" "}
@@ -292,7 +329,7 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3">
         <BigBtn active={pending === "hit"} dimmed={!!pending && pending !== "hit"} onClick={() => decide("hit")} color="hit" label={t("hit")} sub="+1" />
-        <BigBtn active={pending === "stand"} dimmed={!!pending && pending !== "stand"} onClick={() => decide("stand")} color="stand" label={t("stand")} sub={`= ${player.hand?.total ?? ""}`} />
+        <BigBtn active={pending === "stand"} dimmed={!!pending && pending !== "stand"} onClick={() => decide("stand")} color="stand" label={t("stand")} sub={`= ${activeHand(player)?.total ?? ""}`} />
         {me.canDouble && (
           <BigBtn
             active={pending === "double"}
@@ -301,7 +338,18 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
             color="double"
             label={t("double")}
             sub="×2 · +1"
-            wide
+            wide={!me.canSplit}
+          />
+        )}
+        {me.canSplit && (
+          <BigBtn
+            active={pending === "split"}
+            dimmed={!!pending && pending !== "split"}
+            onClick={() => decide("split")}
+            color="split"
+            label={t("split")}
+            sub={t("splitHint")}
+            wide={!me.canDouble}
           />
         )}
       </div>
@@ -324,7 +372,7 @@ function BigBtn({
   label: string;
   sub: string;
   onClick: () => void;
-  color: "hit" | "stand" | "double";
+  color: "hit" | "stand" | "double" | "split";
   active: boolean;
   dimmed: boolean;
   wide?: boolean;
@@ -333,13 +381,14 @@ function BigBtn({
     hit: { background: "linear-gradient(160deg, #7dd3fc, #0ea5e9)", color: "#04121b" },
     stand: { background: "linear-gradient(160deg, #ffffff, #d7dde5)", color: "#06080b" },
     double: { background: "linear-gradient(160deg, #a78bfa, #6d28d9)", color: "#ffffff" },
+    split: { background: "linear-gradient(160deg, #fde68a, #f59e0b)", color: "#1a1204" },
   }[color];
   return (
     <motion.button
       whileTap={{ scale: 0.94 }}
       onClick={onClick}
       animate={{ opacity: dimmed ? 0.35 : 1, scale: active ? 1.02 : 1 }}
-      className={`relative flex flex-col items-center justify-center rounded-3xl ${wide ? "col-span-2 min-h-[64px]" : "min-h-[104px]"}`}
+      className={`relative flex flex-col items-center justify-center rounded-3xl ${wide ? "col-span-2 min-h-[64px]" : color === "double" || color === "split" ? "min-h-[72px]" : "min-h-[104px]"}`}
       style={{
         ...styles,
         boxShadow: active ? "0 0 0 4px #f5c451, 0 20px 40px -16px rgba(245,196,81,.6)" : "0 16px 32px -18px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.5)",
@@ -356,13 +405,15 @@ function ResultCard({ player }: { player: PublicPlayer }) {
   const t = useT();
   const lang = useLang((s) => s.lang);
   const h = player.hand!;
-  const net = h.net ?? 0;
+  const h2 = player.hand2;
+  const net = (h.net ?? 0) + (h2?.net ?? 0);
+  const outcome = roundOutcome(player)!;
   const cfg = {
     blackjack: { title: t("youBJ"), cls: "gold-text", bg: "rgba(245,196,81,.18)", icon: "🂡" },
     win: { title: t("youWin"), cls: "text-win", bg: "rgba(52,211,153,.15)", icon: "🎉" },
     push: { title: t("youPush"), cls: "text-push", bg: "rgba(147,197,253,.12)", icon: "🤝" },
-    lose: { title: h.status === "busted" ? t("BUST") : t("youLose"), cls: "text-lose", bg: "rgba(251,113,133,.12)", icon: h.status === "busted" ? "💥" : "😬" },
-  }[h.outcome!];
+    lose: { title: h.status === "busted" && !h2 ? t("BUST") : t("youLose"), cls: "text-lose", bg: "rgba(251,113,133,.12)", icon: h.status === "busted" && !h2 ? "💥" : "😬" },
+  }[outcome];
   return (
     <motion.div
       initial={{ scale: 0.9, opacity: 0 }}
@@ -379,6 +430,16 @@ function ResultCard({ player }: { player: PublicPlayer }) {
         {net > 0 ? "+" : net < 0 ? "−" : ""}
         {fmt(Math.abs(net), lang)}
       </div>
+      {h2 && (
+        <div className="mt-3 flex gap-2">
+          {[h, h2].map((x, i) => (
+            <span key={i} className={`tabular rounded-full px-3 py-1 text-sm font-bold ${x.outcome === "win" ? "bg-win/20 text-win" : x.outcome === "push" ? "bg-push/20 text-push" : "bg-lose/20 text-lose"}`}>
+              ✌️ {i + 1}: {x.total} · {(x.net ?? 0) > 0 ? "+" : (x.net ?? 0) < 0 ? "−" : ""}
+              {fmt(Math.abs(x.net ?? 0), lang)}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="mt-3 text-sm text-muted">{t("nextRound")}</div>
     </motion.div>
   );

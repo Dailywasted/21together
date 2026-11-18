@@ -4,6 +4,7 @@ import type { PublicSnapshot, RoundResult } from "@21/engine";
 import { Chip } from "../components/Chip";
 import { Avatar } from "../components/ui";
 import { useT } from "../lib/i18n";
+import { roundOutcome } from "../lib/view";
 import { onRoomEvent } from "../lib/store";
 import { sfx } from "../lib/sound";
 
@@ -13,6 +14,8 @@ export const ARENA = { TOP_H: 84, STRIP_H: 236, TILE_H: 196, GAP: 12 };
 export interface Lag {
   shared: number;
   dealer: number;
+  /** Revealed cards on the split rows [hand 1, hand 2]. */
+  rows: [number, number];
   pending: boolean;
 }
 
@@ -36,8 +39,8 @@ export type Mood = "idle" | "tense" | "win" | "lose";
 
 export function useMood(snap: PublicSnapshot): Mood {
   if (snap.phase === "payout") {
-    const inHand = snap.players.filter((p) => p.hand?.outcome);
-    return inHand.some((p) => isWin(p.hand!.outcome)) ? "win" : "lose";
+    const inHand = snap.players.filter((p) => roundOutcome(p));
+    return inHand.some((p) => isWin(roundOutcome(p))) ? "win" : "lose";
   }
   if (snap.phase === "deciding" || snap.phase === "drawing" || snap.phase === "dealer" || snap.phase === "dealing") return "tense";
   return "idle";

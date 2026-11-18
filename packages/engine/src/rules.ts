@@ -15,6 +15,8 @@ export interface Rules {
   manual: boolean;
   /** Bonus mini-games (Reindeer Race) unlocked by win streaks. */
   bonusGames: boolean;
+  /** Players may split a pair on their first decision (once; split aces get one card each). */
+  allowSplit: boolean;
 }
 
 export const DEFAULT_RULES: Rules = {
@@ -31,6 +33,7 @@ export const DEFAULT_RULES: Rules = {
   decisionSeconds: 10,
   manual: false,
   bonusGames: true,
+  allowSplit: true,
 };
 
 /** Clamps host-provided rule changes into sane ranges. */
@@ -50,5 +53,6 @@ export function sanitizeRules(base: Rules, patch: Partial<Rules>): Rules {
   r.dealerPeek = !!r.dealerPeek;
   r.manual = !!r.manual;
   r.bonusGames = r.bonusGames !== false;
+  r.allowSplit = r.allowSplit !== false;
   return r;
 }

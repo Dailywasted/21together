@@ -95,13 +95,28 @@ export function HistoryTab({ snap, playerId }: { snap: PublicSnapshot; playerId:
               </span>
             </div>
             <div className="mt-2 flex items-center gap-3">
-              <div className="flex gap-0.5">
-                {h.shared.map((c, i) => (
-                  <div key={i} style={{ opacity: mine && i >= mine.stopAt ? 0.3 : 1 }}>
-                    <MiniCard card={c} width={24} />
-                  </div>
-                ))}
-              </div>
+              {mine?.split && h.splitRows ? (
+                <div className="flex flex-col gap-1">
+                  {mine.split.map((x, k) => (
+                    <div key={k} className="flex items-center gap-0.5">
+                      <span className="mr-1 text-[10px] font-bold text-accent">✌️{k + 1}</span>
+                      {h.splitRows![k]!.map((c, i) => (
+                        <div key={i} style={{ opacity: i >= x.stopAt ? 0.3 : 1 }}>
+                          <MiniCard card={c} width={24} />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex gap-0.5">
+                  {h.shared.map((c, i) => (
+                    <div key={i} style={{ opacity: mine && i >= mine.stopAt ? 0.3 : 1 }}>
+                      <MiniCard card={c} width={24} />
+                    </div>
+                  ))}
+                </div>
+              )}
               <span className="text-white/25">{t("vs")}</span>
               <div className="flex gap-0.5">
                 {h.dealer.map((c, i) => (
@@ -112,7 +127,7 @@ export function HistoryTab({ snap, playerId }: { snap: PublicSnapshot; playerId:
             {mine ? (
               <div className="mt-2 flex items-center justify-between rounded-xl bg-white/5 px-2.5 py-1.5 text-sm">
                 <span className="font-semibold">
-                  {t("you")} · <span className="tabular">{mine.total}</span> {mine.doubled ? "· ×2" : ""}
+                  {t("you")} · <span className="tabular">{mine.split ? mine.split.map((x) => x.total).join(" / ") : mine.total}</span> {mine.split ? `· ${t("SPLIT")}` : mine.doubled ? "· ×2" : ""}
                 </span>
                 <span className={`tabular font-bold ${mine.net > 0 ? "text-win" : mine.net < 0 ? "text-lose" : "text-push"}`}>
                   {t(mine.outcome === "blackjack" ? "BJ" : mine.outcome === "win" ? "WIN" : mine.outcome === "push" ? "PUSH" : mine.total > 21 ? "BUST" : "LOSE")}{" "}

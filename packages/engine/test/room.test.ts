@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RoomCore, TIMING, seededRng, RoomError, makeRunners, makeScript, RACE_RUNNERS, type Card } from "../src";
+import { RoomCore, TIMING, seededRng, RoomError, makeRunners, makeScript, RACE_RUNNERS, currentHand, type Card } from "../src";
 
 function rig(room: RoomCore, cards: Card[]) {
   const filler: Card[] = Array.from({ length: 200 }, () => "2C" as Card);
@@ -270,9 +270,10 @@ describe("RoomCore lifecycle", () => {
       }
       if (s.phase === "deciding") {
         for (const id of ids) {
-          const h = s.round!.hands[id];
+          const h = currentHand(s.round!, id);
           if (h && h.status === "active" && h.pending === null && rng() < 0.7) {
-            const choice = rng() < 0.1 && room.privateView(id)!.canDouble ? "double" : rng() < 0.5 ? "hit" : "stand";
+            const view = room.privateView(id)!;
+            const choice = rng() < 0.3 && view.canSplit ? "split" : rng() < 0.1 && view.canDouble ? "double" : rng() < 0.5 ? "hit" : "stand";
             room.decide(id, choice, now);
           }
         }
@@ -386,5 +387,56 @@ describe("streak meter cooldown", () => {
     expect(room.snapshot(now()).bonusReadyIn).toBe(3);
     room.updateRules({ bonusGames: false }, now());
     expect(room.snapshot(now()).bonusReadyIn).toBeNull();
+  });
+});
+
+describe("split in a room", () => {
+  it("takes the second stake, pays both hands and records them", () => {
+    const { room, ids, now, advance } = setup(2);
+    const [a, b] = ids as [string, string];
+    room.hostStart(now());
+    // Shared 8,8 · dealer 10 up, 7 hole · a's hands: 8+10 and 8+9 · dealer stands on 17.
+    rig(room, ["8S", "10H", "8D", "7C", "10S", "9H"]);
+    room.placeBet(a, 100, true, now());
+    room.placeBet(b, 100, true, now());
+    advance(TIMING.allLockedMs);
+    advance(TIMING.dealMs);
+    expect(room.privateView(a)!.canSplit).toBe(true);
+    room.decide(a, "split", now());
+    room.decide(b, "stand", now());
+    advance(TIMING.allDecidedMs);
+    expect(room.state.players[a]!.chips).toBe(800); // two stakes on the table
+    const snap = room.snapshot(now());
+    expect(snap.splitRows).toEqual([["8S", "10S"], ["8D"]]);
+    expect(snap.lastStep!.splitters).toEqual([a]);
+    expect(snap.players.find((p) => p.id === a)!.hand2).toMatchObject({ row: 2, status: "waiting" });
+    // First hand 18: stand. Then the second hand (8+9) plays.
+    advance(TIMING.drawMs);
+    room.decide(a, "stand", now());
+    advance(TIMING.allDecidedMs);
+    expect(room.privateView(a)!.playing).toBe(2);
+    advance(TIMING.drawMs);
+    room.decide(a, "stand", now());
+    for (let i = 0; i < 10 && room.state.phase !== "payout"; i++) advance(3000);
+    expect(room.state.phase).toBe("payout");
+    // Dealer 17: 18 wins (+100), 17 pushes (0).
+    expect(room.state.players[a]!.chips).toBe(1100);
+    const res = room.state.history[0]!.results.find((r) => r.playerId === a)!;
+    expect(res).toMatchObject({ bet: 200, net: 100, outcome: "win" });
+    expect(res.split!.map((h) => h.outcome)).toEqual(["win", "push"]);
+    expect(room.state.players[a]!.stats.hands).toBe(2);
+  });
+
+  it("cannot split without chips for the second stake", () => {
+    const { room, ids, now, advance } = setup(1);
+    const [a] = ids as [string];
+    room.hostStart(now());
+    rig(room, ["8S", "10H", "8D", "7C"]);
+    room.state.players[a]!.chips = 700;
+    room.placeBet(a, 500, true, now());
+    advance(TIMING.allLockedMs);
+    advance(TIMING.dealMs);
+    expect(room.privateView(a)!.canSplit).toBe(false);
+    expect(() => room.decide(a, "split", now())).toThrow(RoomError);
   });
 });

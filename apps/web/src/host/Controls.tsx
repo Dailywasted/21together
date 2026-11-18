@@ -387,6 +387,15 @@ function SettingsPanel({ rules, onSave }: { rules: Rules; onSave: (r: Partial<Ru
           />
         </label>
         <label className="flex items-center justify-between rounded-2xl bg-white/5 p-3">
+          <span className="text-sm font-bold">✌️ {t("rule_split")}</span>
+          <input
+            type="checkbox"
+            checked={draft.allowSplit !== false}
+            onChange={(e) => setDraft({ ...draft, allowSplit: e.target.checked })}
+            className="h-6 w-6 accent-[#f5c451]"
+          />
+        </label>
+        <label className="flex items-center justify-between rounded-2xl bg-white/5 p-3">
           <span className="text-sm font-bold">{t("rule_bj")}</span>
           <select
             value={draft.blackjackPayout}

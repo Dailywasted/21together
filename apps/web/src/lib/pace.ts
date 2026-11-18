@@ -11,7 +11,8 @@ export const PHONE_AFTER_TV_MS = 1500;
 /** Phones show the round result this long after the TV starts its payout celebration. */
 export const PHONE_RESULT_LAG_MS = 1500;
 
-const cardCount = (s: PublicSnapshot) => s.shared.length + s.dealer.filter(Boolean).length;
+const cardCount = (s: PublicSnapshot) =>
+  s.shared.length + s.dealer.filter(Boolean).length + (s.splitRows ? s.splitRows[0].length + s.splitRows[1].length : 0);
 
 /** How long a phone should hold this update so the TV gets there first (0 = show it now). */
 export function phoneLag(prev: PublicSnapshot | null, next: PublicSnapshot): number {

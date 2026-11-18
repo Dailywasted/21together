@@ -84,7 +84,7 @@ Check that it works: opening the game server address should show `{"ok":true,"se
 | `C` | card size on the TV: Normal → Large → Extra large (bigger cards and corner numbers for guests far from the screen; also in Settings) |
 | `B` | start a 🦌 **Reindeer Race** bonus (during betting, or right after the current payout) |
 | `P` | players: top up chips (+500 / +1000), kick, ban |
-| `S` | settings (card size, decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
+| `S` | settings (card size, split on/off, decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
 | `F` | fullscreen |
 | `Esc` | close a panel |
 
@@ -108,7 +108,9 @@ Good to know:
 
 In each decision step, every player who is still in chooses at the same time, and the choices stay hidden until the step ends.
 If anyone hits, the **next shared card** is revealed and every hitter takes it. Players who stand stay where they are.
-Doubling is allowed on the first decision only. Blackjack pays 3:2 and the dealer stands on soft 17 (both configurable).
+Doubling is allowed on the first decision (and on a split hand). Blackjack pays 3:2 and the dealer stands on soft 17 (both configurable).
+
+✌️ **Split:** when the first two cards are a pair, phones show a **Split** button. Each player decides; splitting costs a second bet. Everyone who splits plays the same two new hands, side by side on the TV (and if the whole table splits, the TV shows just those two hands). One split per round, split aces get one card each, and 21 after a split pays 1:1. You can turn it off in Settings.
 Full spec: [docs/GAME_SPEC.md](docs/GAME_SPEC.md).
 
 ## Stack

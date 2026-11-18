@@ -11,6 +11,7 @@ export const ACHIEVEMENTS = [
   "comeback",
   "double_up",
   "big_win",
+  "split_double",
 ] as const;
 
 export type AchievementCode = (typeof ACHIEVEMENTS)[number];
@@ -28,4 +29,5 @@ export const ACHIEVEMENT_ICONS: Record<AchievementCode, string> = {
   comeback: "🔄",
   double_up: "📈",
   big_win: "💰",
+  split_double: "✌️",
 };

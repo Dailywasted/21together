@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { handValue, type Card, type PublicSnapshot } from "@21/engine";
 import { CountdownRing, useNow } from "../components/ui";
 import { useT } from "../lib/i18n";
+import { activeHand, roundOutcome } from "../lib/view";
 import { timeLeft } from "../lib/store";
 
 /** Phase banner between the dealer and the shared row. */
@@ -10,7 +11,7 @@ export function Banner({ snap, offset }: { snap: PublicSnapshot; offset: number 
   useNow(100);
   const left = timeLeft(snap, offset);
   const inHand = snap.players.filter((p) => p.hand);
-  const active = inHand.filter((p) => p.hand!.status === "active");
+  const active = inHand.filter((p) => activeHand(p));
   let title = t(`phase_${snap.phase}`);
   let sub: string | null = null;
   let tone: "gold" | "plain" | "win" | "lose" = "plain";
@@ -28,14 +29,15 @@ export function Banner({ snap, offset }: { snap: PublicSnapshot; offset: number 
       break;
     }
     case "deciding": {
-      const locked = active.filter((p) => p.hand!.locked).length;
+      const locked = active.filter((p) => activeHand(p)!.locked).length;
       sub = t("lockedIn", { n: locked, m: active.length });
       tone = "gold";
       break;
     }
     case "drawing": {
       const takers = snap.lastStep?.takers.length ?? 0;
-      title = snap.lastStep?.card ? t("hitters", { n: takers }) : t("everyoneStands");
+      const splits = snap.lastStep?.splitters?.length ?? 0;
+      title = splits ? `${t("SPLIT")} ×${splits}` : snap.lastStep?.secondHands ? t("secondHands") : (snap.lastStep?.rowCards?.length ?? (snap.lastStep?.card ? 1 : 0)) ? t("hitters", { n: takers }) : t("everyoneStands");
       break;
     }
     case "dealer":
@@ -48,7 +50,7 @@ export function Banner({ snap, offset }: { snap: PublicSnapshot; offset: number 
         tone = "lose";
       }
       if (snap.phase === "payout") {
-        const winners = inHand.filter((p) => p.hand?.outcome === "win" || p.hand?.outcome === "blackjack").length;
+        const winners = inHand.filter((p) => roundOutcome(p) === "win" || roundOutcome(p) === "blackjack").length;
         sub = t("winnersOf", { n: winners, m: inHand.length });
         if (tone === "plain") tone = winners > inHand.length / 2 ? "win" : "plain";
       }

@@ -1,4 +1,4 @@
-import { handValue, type Card, type PublicSnapshot, type PublicPlayer } from "@21/engine";
+import { handValue, type Card, type Outcome, type PublicSnapshot, type PublicPlayer, type PublicHand } from "@21/engine";
 import type { TKey } from "./i18n";
 
 export type BadgeTone = "gold" | "win" | "lose" | "push" | "muted" | "hit" | "stand" | "accent";
@@ -12,6 +12,19 @@ export interface SeatBadge {
 
 /** What to show on a player's seat for the current phase. */
 export function seatBadge(p: PublicPlayer, s: PublicSnapshot): SeatBadge | null {
+  // After a split: the round result is both hands together; during play, show the hand being played.
+  if (p.hand && p.hand2) {
+    if (s.phase === "payout" && p.hand.outcome && p.hand2.outcome) {
+      const net = (p.hand.net ?? 0) + (p.hand2.net ?? 0);
+      const amount = `${net > 0 ? "+" : net < 0 ? "−" : ""}${Math.abs(net)}`;
+      if (net > 0) return { key: "WIN", text: amount, tone: "win" };
+      if (net < 0) return { key: "LOSE", text: amount, tone: "lose" };
+      return { key: "PUSH", tone: "push" };
+    }
+    if (s.phase === "drawing" && s.lastStep?.revealed[p.id] === "split") return { key: "SPLIT", tone: "accent" };
+    const playing = p.hand.status === "active" ? p.hand : p.hand2;
+    return seatBadge({ ...p, hand: playing, hand2: null }, s);
+  }
   const h = p.hand;
   if (s.phase === "betting") {
     if (p.betLocked) return { key: "locked", tone: "gold" };
@@ -45,7 +58,41 @@ export function seatBadge(p: PublicPlayer, s: PublicSnapshot): SeatBadge | null 
       return { key: "DOUBLE", tone: "accent" };
     case "stood":
       return { key: "STAND", text: String(h.total), tone: "stand" };
+    case "waiting":
+      return { key: "SPLIT", tone: "accent" };
   }
+}
+
+/** The hand a player is deciding on right now (the second hand after a split, once the first is done). */
+export function activeHand(p: PublicPlayer): PublicHand | null {
+  if (p.hand?.status === "active") return p.hand;
+  if (p.hand2?.status === "active") return p.hand2;
+  return null;
+}
+
+/** A player's result for the round: after a split, both hands together (by net). */
+export function roundOutcome(p: PublicPlayer): Outcome | null {
+  if (!p.hand?.outcome) return null;
+  if (!p.hand2) return p.hand.outcome;
+  if (!p.hand2.outcome) return null;
+  const net = (p.hand.net ?? 0) + (p.hand2.net ?? 0);
+  return net > 0 ? "win" : net < 0 ? "lose" : "push";
+}
+
+/** The cards of a hand on its row (0 = shared, 1-2 = split rows). */
+export function rowOf(s: PublicSnapshot, row: number): Card[] {
+  if (row === 0) return s.shared;
+  return s.splitRows?.[row - 1] ?? [];
+}
+
+/** Every hand in play with its owner (main hands and second hands of splits). */
+export function handsOf(s: PublicSnapshot): { p: PublicPlayer; h: NonNullable<PublicPlayer["hand"]> }[] {
+  const out: { p: PublicPlayer; h: NonNullable<PublicPlayer["hand"]> }[] = [];
+  for (const p of s.players) {
+    if (p.hand) out.push({ p, h: p.hand });
+    if (p.hand2) out.push({ p, h: p.hand2 });
+  }
+  return out;
 }
 
 export const TONE_CLASSES: Record<BadgeTone, string> = {

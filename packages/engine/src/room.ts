@@ -8,9 +8,16 @@ import {
   resolveStep,
   playDealer,
   canDouble,
+  canSplit,
+  currentHand,
+  handCards,
+  rowCards,
+  allHands,
   handNet,
   type Decision,
+  type HandRow,
   type HandStatus,
+  type PlayerHand,
   type Outcome,
   type RoundState,
 } from "./round";
@@ -118,23 +125,40 @@ export interface Player {
   flags: { brave16?: boolean; lowStand?: boolean };
 }
 
-export interface RoundResult {
-  playerId: string;
-  name: string;
-  avatar: string;
+/** One hand of a split, as recorded in the round history. */
+export interface SplitHandResult {
+  row: HandRow;
   bet: number;
   stopAt: number;
   total: number;
   outcome: Outcome;
   net: number;
   doubled: boolean;
+}
+
+export interface RoundResult {
+  playerId: string;
+  name: string;
+  avatar: string;
+  /** Total stake (both hands after a split). */
+  bet: number;
+  stopAt: number;
+  total: number;
+  /** Overall result; after a split it follows the combined net (win / push / lose). */
+  outcome: Outcome;
+  net: number;
+  doubled: boolean;
   decisions: Decision[];
+  /** Both hands when the player split. */
+  split?: SplitHandResult[];
 }
 
 export interface RoundSummary {
   no: number;
   at: number;
   shared: Card[];
+  /** Split rows of the round, when someone split. */
+  splitRows?: [Card[], Card[]] | null;
   dealer: Card[];
   dealerTotal: number;
   early: RoundState["early"];
@@ -153,6 +177,11 @@ export interface StepInfo {
   card: Card | null;
   takers: string[];
   revealed: Record<string, Decision>;
+  /** Every card drawn this step with its row (0 shared, 1-2 split rows). */
+  rowCards?: { row: HandRow; card: Card }[];
+  splitters?: string[];
+  /** The second split hands started this step. */
+  secondHands?: boolean;
 }
 
 export interface RoomState {
@@ -192,7 +221,7 @@ export type RoomEvent =
   | { k: "shuffle" }
   | { k: "deal" }
   | { k: "noBets" }
-  | { k: "step"; card: Card | null; takers: string[]; revealed: Record<string, Decision> }
+  | { k: "step"; card: Card | null; takers: string[]; revealed: Record<string, Decision>; rowCards?: { row: HandRow; card: Card }[]; splitters?: string[]; secondHands?: boolean }
   | { k: "dealerCard"; card: Card; index: number }
   | { k: "payout"; results: RoundResult[] }
   | { k: "achievement"; playerId: string; name: string; code: AchievementCode }
@@ -479,9 +508,10 @@ export class RoomCore {
     const r = s.round;
     if (s.phase !== "deciding" || !r) throw new RoomError("not_deciding");
     const p = s.players[playerId];
-    const h = r.hands[playerId];
+    const h = currentHand(r, playerId);
     if (!p || !h) throw new RoomError("not_in_hand");
     if (decision === "double" && (!canDouble(r, playerId) || p.chips < h.bet)) throw new RoomError("cannot_double");
+    if (decision === "split" && (!canSplit(r, playerId) || p.chips < h.bet)) throw new RoomError("cannot_split");
     if (!submitDecision(r, playerId, decision)) throw new RoomError("bad_decision");
     if (allDecided(r) && s.deadline !== null && !s.paused) {
       const target = now + TIMING.allDecidedMs;
@@ -497,28 +527,43 @@ export class RoomCore {
   private resolveDecisions(now: number): void {
     const s = this.state;
     const r = s.round!;
-    // Remember pre-draw totals for achievements.
-    const before = handValue(r.shared);
+    // Remember pre-draw totals (per player's current hand) and stakes, for achievements and chips.
+    const before: Record<string, ReturnType<typeof handValue>> = {};
+    const stakeBefore: Record<string, number> = {};
+    for (const pid of Object.keys(r.hands)) {
+      const h = currentHand(r, pid);
+      if (h) before[pid] = handValue(handCards(r, h));
+      stakeBefore[pid] = playerStake(r, pid);
+    }
     const res = resolveStep(r, s.shoe, this.rng);
     for (const [pid, d] of Object.entries(res.revealed)) {
       const p = s.players[pid];
       if (!p) continue;
-      if (d === "double") {
-        // resolveStep already doubled hand.bet; take the extra stake.
-        const extra = r.hands[pid]!.bet / 2;
+      // Doubling or splitting raised the stake on the table; take it from the player's chips.
+      const extra = playerStake(r, pid) - (stakeBefore[pid] ?? 0);
+      if (extra > 0) {
         p.chips -= extra;
         p.lowWater = Math.min(p.lowWater, p.chips);
       }
+      const b = before[pid];
       if (d === "hit") {
         p.stats.hits++;
-        if (!before.soft && before.total === 16) p.flags.brave16 = true;
+        if (b && !b.soft && b.total === 16) p.flags.brave16 = true;
       }
-      if (d === "stand" && before.total <= 12) p.flags.lowStand = true;
+      if (d === "stand" && b && b.total <= 12) p.flags.lowStand = true;
     }
-    s.lastStep = { card: res.card, takers: res.takers, revealed: res.revealed };
-    this.events.push({ k: "step", card: res.card, takers: res.takers, revealed: res.revealed });
+    const step = {
+      card: res.card,
+      takers: res.takers,
+      revealed: res.revealed,
+      rowCards: res.rowCards,
+      splitters: res.splitters,
+      secondHands: res.secondHands,
+    };
+    s.lastStep = step;
+    this.events.push({ k: "step", ...step });
     s.phase = "drawing";
-    this.setDeadline(now, res.card ? TIMING.drawMs : TIMING.noDrawMs);
+    this.setDeadline(now, res.rowCards.length > 0 ? TIMING.drawMs : TIMING.noDrawMs);
   }
 
   private enterDealer(now: number): void {
@@ -550,47 +595,73 @@ export class RoomCore {
     const s = this.state;
     const r = s.round!;
     const results: RoundResult[] = [];
-    for (const h of Object.values(r.hands)) {
-      const p = s.players[h.playerId];
+    for (const main of Object.values(r.hands)) {
+      const p = s.players[main.playerId];
       if (!p) continue;
-      p.chips += h.returned;
-      const net = handNet(h);
-      const cards = r.shared.slice(0, h.stopAt);
-      const total = handValue(cards).total;
-      const doubled = h.decisions.includes("double");
+      const second = r.seconds[main.playerId];
+      const hands: PlayerHand[] = second ? [main, second] : [main];
       const st = p.stats;
-      st.hands++;
-      st.wagered += h.bet;
+      let net = 0;
+      let bet = 0;
+      for (const h of hands) {
+        p.chips += h.returned;
+        const hn = handNet(h);
+        net += hn;
+        bet += h.bet;
+        // Per-hand stats: a split counts as two hands.
+        const doubled = h.decisions.includes("double");
+        st.hands++;
+        st.wagered += h.bet;
+        if (h.outcome === "win" || h.outcome === "blackjack") {
+          st.wins++;
+          if (doubled) st.doubleWins++;
+          if (p.flags.lowStand) st.lowStandWins++;
+        } else if (h.outcome === "push") st.pushes++;
+        else st.losses++;
+        if (h.outcome === "blackjack") st.blackjacks++;
+        if (h.status === "busted") st.busts++;
+        if (doubled) st.doubles++;
+      }
+      // The round as a whole decides the streak and the headline result.
+      const outcome: Outcome = second ? (net > 0 ? "win" : net < 0 ? "lose" : "push") : main.outcome!;
       st.net += net;
-      if (h.outcome === "win" || h.outcome === "blackjack") {
-        st.wins++;
+      if (outcome === "win" || outcome === "blackjack") {
         st.streak++;
         st.bestStreak = Math.max(st.bestStreak, st.streak);
         st.biggestWin = Math.max(st.biggestWin, net);
-        if (doubled) st.doubleWins++;
-        if (p.flags.lowStand) st.lowStandWins++;
-      } else if (h.outcome === "push") {
-        st.pushes++;
-      } else {
-        st.losses++;
+      } else if (outcome === "lose") {
         st.streak = 0;
         st.biggestLoss = Math.max(st.biggestLoss, -net);
       }
-      if (h.outcome === "blackjack") st.blackjacks++;
-      if (h.status === "busted") st.busts++;
-      if (doubled) st.doubles++;
-      this.checkAchievements(p, h.outcome!, net, cards.length, doubled, h.bet);
+      const cards = handCards(r, main);
+      const anyDoubled = hands.some((h) => h.decisions.includes("double"));
+      const maxCards = Math.max(...hands.map((h) => handCards(r, h).length));
+      this.checkAchievements(p, outcome, net, maxCards, anyDoubled, main.bet);
+      if (second && main.outcome !== "lose" && main.outcome !== "push" && second.outcome !== "lose" && second.outcome !== "push") {
+        this.award(p, "split_double");
+      }
       results.push({
         playerId: p.id,
         name: p.name,
         avatar: p.avatar,
-        bet: h.bet,
-        stopAt: h.stopAt,
-        total,
-        outcome: h.outcome!,
+        bet,
+        stopAt: main.stopAt,
+        total: handValue(cards).total,
+        outcome,
         net,
-        doubled,
-        decisions: h.decisions,
+        doubled: anyDoubled,
+        decisions: main.decisions,
+        split: second
+          ? hands.map((h) => ({
+              row: h.row,
+              bet: h.bet,
+              stopAt: h.stopAt,
+              total: handValue(handCards(r, h)).total,
+              outcome: h.outcome!,
+              net: handNet(h),
+              doubled: h.decisions.includes("double"),
+            }))
+          : undefined,
       });
     }
     results.sort((a, b) => b.net - a.net);
@@ -598,6 +669,7 @@ export class RoomCore {
       no: s.roundNo,
       at: now,
       shared: [...r.shared],
+      splitRows: r.splitRows ? [[...r.splitRows[0]], [...r.splitRows[1]]] : null,
       dealer: [...r.dealer],
       dealerTotal: handValue(r.dealer).total,
       early: r.early,
@@ -850,8 +922,11 @@ export class RoomCore {
     if (!p) return;
     if (this.inHand(playerId)) {
       // Force-stand so the round can continue; the stake stays on the table.
-      const h = s.round!.hands[playerId]!;
-      if (h.status === "active") h.pending = "stand";
+      for (const h of [s.round!.hands[playerId], s.round!.seconds[playerId]]) {
+        if (h?.status === "active") h.pending = "stand";
+        // A parked second hand just stands when its turn comes.
+        if (h?.status === "waiting") h.status = "stood";
+      }
     }
     p.left = true;
     p.connected = false;
@@ -913,7 +988,7 @@ export class RoomCore {
     const s = this.state;
     if (this.state.round && s.phase !== "payout" && s.phase !== "betting") {
       // Refund stakes of an unfinished round.
-      for (const h of Object.values(s.round!.hands)) {
+      for (const h of allHands(s.round!)) {
         const p = s.players[h.playerId];
         if (p) p.chips += h.bet;
       }
@@ -1000,13 +1075,15 @@ export class RoomCore {
     const p = s.players[playerId];
     if (!p) return null;
     const r = s.round;
-    const h = r?.hands[playerId];
-    const cards = h && r ? r.shared.slice(0, h.stopAt) : [];
+    const h = r ? currentHand(r, playerId) : undefined;
+    const cards = h && r ? handCards(r, h) : [];
     return {
       playerId,
       pending: h?.pending ?? null,
       canDouble:
         !!h && !!r && s.phase === "deciding" && canDouble(r, playerId) && p.chips >= h.bet,
+      canSplit: !!h && !!r && s.phase === "deciding" && canSplit(r, playerId) && p.chips >= h.bet,
+      playing: h && r?.seconds[playerId] ? (h.row === 2 ? 2 : 1) : null,
       bustChance: h && h.status === "active" ? bustProbability(cards) : 0,
       stats: p.stats,
       achievements: p.achievements,
@@ -1027,8 +1104,17 @@ export interface PublicPlayer {
   bet: number;
   betLocked: boolean;
   connected: boolean;
-  /** Hand status in the current round (null when sitting out). */
-  hand: {
+  /** Hand status in the current round (null when sitting out). After a split this is the first hand. */
+  hand: PublicHand | null;
+  /** Second hand after a split. */
+  hand2: PublicHand | null;
+  streak: number;
+  achievements: number;
+}
+
+export interface PublicHand {
+    /** Row the hand reads from: 0 shared, 1-2 split rows. */
+    row: HandRow;
     bet: number;
     status: HandStatus;
     stopAt: number;
@@ -1039,9 +1125,6 @@ export interface PublicPlayer {
     doubled: boolean;
     outcome: Outcome | null;
     net: number | null;
-  } | null;
-  streak: number;
-  achievements: number;
 }
 
 export interface PublicSnapshot {
@@ -1059,6 +1142,8 @@ export interface PublicSnapshot {
   dealer: (Card | null)[];
   dealerTotal: number | null;
   shared: Card[];
+  /** Split rows ([first hand, second hand]) once someone splits this round. */
+  splitRows: [Card[], Card[]] | null;
   step: number;
   lastStep: StepInfo | null;
   seats: (string | null)[];
@@ -1079,6 +1164,9 @@ export interface PrivateView {
   playerId: string;
   pending: Decision | null;
   canDouble: boolean;
+  canSplit: boolean;
+  /** After a split: which hand the player is playing now (1 or 2). */
+  playing: 1 | 2 | null;
   bustChance: number;
   stats: PlayerStats;
   achievements: AchievementCode[];
@@ -1086,6 +1174,27 @@ export interface PrivateView {
 }
 
 const SHOW_OUTCOMES: RoomPhase[] = ["payout", "betting", "ended", "lobby"];
+
+/** Everything a player has on the table this round (both hands after a split). */
+function playerStake(r: RoundState, playerId: string): number {
+  return (r.hands[playerId]?.bet ?? 0) + (r.seconds[playerId]?.bet ?? 0);
+}
+
+function publicHand(r: RoundState, h: PlayerHand, showOutcome: boolean): PublicHand {
+  const v = handValue(handCards(r, h));
+  return {
+    row: h.row,
+    bet: h.bet,
+    status: h.status,
+    stopAt: h.stopAt,
+    total: v.total,
+    soft: v.soft,
+    locked: h.pending !== null,
+    doubled: h.decisions.includes("double"),
+    outcome: showOutcome ? h.outcome : null,
+    net: showOutcome && h.outcome ? h.returned - h.bet : null,
+  };
+}
 
 export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
   const r = s.round;
@@ -1102,21 +1211,9 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
     .filter((p) => !p.left)
     .map((p) => {
       const h = r?.hands[p.id];
-      let hand: PublicPlayer["hand"] = null;
-      if (h && r) {
-        const v = handValue(r.shared.slice(0, h.stopAt));
-        hand = {
-          bet: h.bet,
-          status: h.status,
-          stopAt: h.stopAt,
-          total: v.total,
-          soft: v.soft,
-          locked: h.pending !== null,
-          doubled: h.decisions.includes("double"),
-          outcome: showOutcome ? h.outcome : null,
-          net: showOutcome && h.outcome ? h.returned - h.bet : null,
-        };
-      }
+      const h2 = r?.seconds[p.id];
+      const hand = h && r ? publicHand(r, h, showOutcome) : null;
+      const hand2 = h2 && r ? publicHand(r, h2, showOutcome) : null;
       return {
         id: p.id,
         name: p.name,
@@ -1128,6 +1225,7 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
         betLocked: p.betLocked,
         connected: p.connected,
         hand,
+        hand2,
         streak: p.stats.streak,
         achievements: p.achievements.length,
       };
@@ -1149,6 +1247,7 @@ export function buildSnapshot(s: RoomState, now: number): PublicSnapshot {
     dealer,
     dealerTotal,
     shared: r ? [...r.shared] : [],
+    splitRows: r?.splitRows ? [[...r.splitRows[0]], [...r.splitRows[1]]] : null,
     step: r?.step ?? 0,
     lastStep: s.phase === "drawing" ? s.lastStep : null,
     seats: [...s.seats],

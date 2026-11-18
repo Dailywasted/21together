@@ -13,7 +13,8 @@ A shared-hand multiplayer blackjack game. One host screen (TV), up to 12 seated 
 | Dealer | Stands on soft 17 (S17); peeks for blackjack with an A or 10-value up card |
 | Blackjack | Pays 3:2 |
 | Double | On the first decision only (2 cards); doubles the bet, takes exactly one card |
-| Split / insurance / surrender | Not available (v1) |
+| Split | A pair of the same rank, on the first decision, once (no re-split). Each player decides. Split aces get one card each. Double after split allowed. 21 after a split pays 1:1. Host can turn it off. |
+| Insurance / surrender | Not available |
 | Bets | 10–500, 1,000 starting chips |
 | Timers | Betting 15s, decision 10s per step (timeout = STAND) |
 
@@ -27,6 +28,13 @@ A shared-hand multiplayer blackjack game. One host screen (TV), up to 12 seated 
    - Invariant: a player's hand is always the first `stopAt` cards of the shared row.
 4. **Dealer** reveals the hole card and draws to 17 (unless every player busted).
 5. **Payout**: win 1:1, blackjack 3:2, push returns the bet, loss loses it.
+
+## Split (shared rows)
+- A split creates two new shared rows: **hand 1** starts with the first card of the pair, **hand 2** with the second. Every player who splits plays on these same two rows, so splitters still share their cards.
+- Players who did not split keep playing the original shared row at the same time as the splitters play hand 1.
+- Hand 2 starts once every other hand is done: all splitters get its second card together, then decide on it together (no one sees a hand-2 card before deciding).
+- When everyone splits, the original row is no longer played and the TV shows just the two hands side by side.
+- The round result for a splitter is both hands together (stats count each hand; the win streak follows the combined result).
 
 ## Round state machine
 ```

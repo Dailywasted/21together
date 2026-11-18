@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
 import confetti from "canvas-confetti";
-import { bustProbability, handValue, type Card, type PublicPlayer, type PublicSnapshot, type RoundResult } from "@21/engine";
+import { bustProbability, handValue, type Card, type HandRow, type PublicPlayer, type PublicSnapshot, type RoundResult } from "@21/engine";
 import { MiniCard, PlayingCard } from "../components/PlayingCard";
 import { ChipStack } from "../components/Chip";
 import { Avatar, CountdownRing, CountUp, Logo, QR, signed, useNow } from "../components/ui";
@@ -9,7 +9,7 @@ import { fmt, useLang, useT, type TKey } from "../lib/i18n";
 import { onReaction, onRoomEvent, timeLeft } from "../lib/store";
 import { joinUrl } from "../lib/api";
 import { sfx } from "../lib/sound";
-import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "../lib/view";
+import { activeHand, handsOf, roundOutcome, rowOf, seatBadge, TONE_CLASSES, TONE_RING, totalLabel, type SeatBadge } from "../lib/view";
 import { useStageWidth } from "./Stage";
 import { StreakMeter } from "../components/StreakMeter";
 import { ChipFlights, GoldDust, LeaderWatch, Marquee, stripGeometry, useMood, type Lag } from "./ArenaFx";
@@ -70,7 +70,12 @@ function useReveal(snap: PublicSnapshot): Lag {
   const dealing = snap.phase === "dealing";
   const shared = useDelayed(sharedLen, dealing ? REVEAL.dealShared : REVEAL.draw);
   const dealer = useDelayed(dealerVis, dealing ? REVEAL.dealDealer : REVEAL.dealer);
-  return { shared, dealer, pending: shared < sharedLen || dealer < dealerVis };
+  // Split rows: their first card is already known (it came from the pair), the rest turn like draws.
+  const len1 = snap.splitRows?.[0].length ?? 0;
+  const len2 = snap.splitRows?.[1].length ?? 0;
+  const r1 = Math.max(Math.min(len1, 1), useDelayed(len1, REVEAL.draw));
+  const r2 = Math.max(Math.min(len2, 1), useDelayed(len2, REVEAL.draw));
+  return { shared, dealer, rows: [r1, r2], pending: shared < sharedLen || dealer < dealerVis || r1 < len1 || r2 < len2 };
 }
 
 const isWin = (o: string | null | undefined) => o === "win" || o === "blackjack";
@@ -79,7 +84,7 @@ const isWin = (o: string | null | undefined) => o === "win" || o === "blackjack"
 function dealerFinished(snap: PublicSnapshot, visible: Card[]): boolean {
   if (snap.phase === "payout") return true;
   if (snap.phase !== "dealer" || visible.length < 2) return false;
-  if (snap.players.every((p) => !p.hand || p.hand.status === "busted")) return true;
+  if (handsOf(snap).every(({ h }) => h.status === "busted")) return true;
   const v = handValue(visible);
   return v.total > 17 || (v.total === 17 && !(v.soft && snap.rules.dealerHitsSoft17));
 }
@@ -263,7 +268,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
   const sStep = rowStep(shared.length, SHARED_W, rowMax);
   const sWidth = (shared.length - 1) * sStep + SHARED_W;
   const newCard = snap.phase === "drawing" && snap.lastStep?.card ? shared.length - 1 : -1;
-  const anyActive = snap.players.some((p) => p.hand?.status === "active");
+  const anyActive = snap.players.some((p) => activeHand(p));
 
   if (snap.phase === "betting" || (snap.phase !== "lobby" && snap.phase !== "ended" && shared.length === 0)) {
     return (
@@ -301,8 +306,11 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
         <PhaseLine snap={snap} lag={lag} showSub={L.sub} />
       </div>
 
+      {/* split: side-by-side lanes (shared row only if someone still plays it) */}
+      {snap.splitRows && <SplitLanes snap={snap} lag={lag} width={width} top={sharedTop - 24} maxCardW={SHARED_W} jumbo={L.jumbo} />}
+
       {/* shared hand */}
-      <div className="absolute left-1/2 flex -translate-x-1/2 items-start gap-10" style={{ top: sharedTop }}>
+      {!snap.splitRows && <div className="absolute left-1/2 flex -translate-x-1/2 items-start gap-10" style={{ top: sharedTop }}>
         <div className="w-[150px] pt-10">
           <TotalBadge cards={sharedShown} final={!anyActive} label={t("sharedRow")} />
         </div>
@@ -323,20 +331,94 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
           <StopMarkers snap={snap} lag={lag} step={sStep} cardW={SHARED_W} />
         </div>
         <div className="w-[150px]" />
-      </div>
+      </div>}
     </div>
   );
 }
 
-type Kind = "active" | "stood" | "doubled" | "busted" | "blackjack";
+/**
+ * After a split the hands sit side by side: the shared row (if anyone still plays it), split hand 1, split hand 2.
+ * When everyone split, only the two hands are shown.
+ */
+function SplitLanes({ snap, lag, width, top, maxCardW, jumbo }: { snap: PublicSnapshot; lag: Lag; width: number; top: number; maxCardW: number; jumbo: boolean }) {
+  const t = useT();
+  const onShared = handsOf(snap).some(({ h }) => h.row === 0);
+  const lanes: { row: HandRow; label: string; weight: number }[] = [
+    ...(onShared ? [{ row: 0 as const, label: t("sharedRow"), weight: 1.2 }] : []),
+    { row: 1, label: t(onShared ? "splitHand1" : "hand1"), weight: 1 },
+    { row: 2, label: t(onShared ? "splitHand2" : "hand2"), weight: 1 },
+  ];
+  const gap = 36;
+  const usable = width - 40 - gap * (lanes.length - 1);
+  const totalWeight = lanes.reduce((a, l) => a + l.weight, 0);
+  const height = MAIN_H - top - 4;
+  // Header (44) + cards + markers (~112) must fit; lanes also need room for 3 overlapping cards.
+  const cardW = Math.min(maxCardW, (height - 44 - 112) / 1.4, ((usable / totalWeight) * 1 - 20) / 1.8);
+  return (
+    <div className="absolute left-0 right-0 flex items-start justify-center" style={{ top, gap }}>
+      {lanes.map((l) => {
+        const laneW = (usable * l.weight) / totalWeight;
+        const cards = rowOf(snap, l.row);
+        const shownN = l.row === 0 ? lag.shared : lag.rows[l.row - 1]!;
+        const shown = cards.slice(0, shownN);
+        const step = rowStep(cards.length, cardW, laneW - 20);
+        const rowW = (cards.length - 1) * step + cardW;
+        const v = handValue(shown);
+        const live = handsOf(snap).some(({ h }) => h.row === l.row && h.status === "active");
+        return (
+          <motion.div
+            key={l.row}
+            layout
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`flex flex-col items-center rounded-3xl px-2 pt-2 ${live ? "bg-white/[.05] ring-1 ring-gold/40" : ""}`}
+            style={{ width: laneW }}
+          >
+            <div className="flex h-[40px] items-center gap-3">
+              <span className={`text-[15px] font-bold tracking-[0.25em] uppercase ${l.row === 0 ? "text-white/45" : "text-accent"}`}>
+                {l.row !== 0 && "✌️ "}
+                {l.label}
+              </span>
+              {shown.length > 0 && (
+                <span className={`tabular rounded-full px-3 py-0.5 font-display text-2xl font-bold ${v.bust ? "bg-lose text-ink" : v.total === 21 ? "bg-gold text-ink" : "bg-white/[.1] text-white"}`}>
+                  {v.total}
+                </span>
+              )}
+            </div>
+            <div className="relative" style={{ width: rowW, height: cardW * 1.4 + 112 }}>
+              {cards.map((c, i) => {
+                // The split card was already on the table: it moves in without the deal suspense.
+                const known = (l.row !== 0 && i === 0) || i < shownN;
+                return (
+                  <div key={`${snap.roundNo}-r${l.row}-${i}`} className="absolute top-0" style={{ left: i * step }}>
+                    <PlayingCard
+                      card={c}
+                      width={cardW}
+                      jumbo={jumbo}
+                      dealFrom={known ? null : { x: 300 - i * step, y: -560 }}
+                      delay={PACE.drawDelay}
+                      flipDelay={PACE.drawFlip}
+                    />
+                  </div>
+                );
+              })}
+              <StopMarkers snap={snap} lag={lag} step={step} cardW={cardW} row={l.row} />
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
 
-function StopMarkers({ snap, lag, step, cardW: SHARED_W }: { snap: PublicSnapshot; lag: Lag; step: number; cardW: number }) {
+type Kind = "active" | "stood" | "doubled" | "busted" | "blackjack" | "waiting";
+
+function StopMarkers({ snap, lag, step, cardW: SHARED_W, row = 0 }: { snap: PublicSnapshot; lag: Lag; step: number; cardW: number; row?: HandRow }) {
   const t = useT();
   const groups = new Map<number, Map<Kind, PublicPlayer[]>>();
-  for (const p of snap.players) {
-    const h = p.hand;
-    if (!h) continue;
-    const kind = h.status as Kind;
+  for (const { p, h } of handsOf(snap)) {
+    if (h.row !== row) continue;
+    const kind = (h.status === "waiting" ? "waiting" : h.status) as Kind;
     if (!groups.has(h.stopAt)) groups.set(h.stopAt, new Map());
     const g = groups.get(h.stopAt)!;
     if (!g.has(kind)) g.set(kind, []);
@@ -345,8 +427,8 @@ function StopMarkers({ snap, lag, step, cardW: SHARED_W }: { snap: PublicSnapsho
   return (
     <>
       {[...groups.entries()].map(([stopAt, kinds]) => {
-        const hidden = stopAt > lag.shared;
-        const cards = snap.shared.slice(0, stopAt);
+        const hidden = stopAt > (row === 0 ? lag.shared : lag.rows[row - 1]!);
+        const cards = rowOf(snap, row).slice(0, stopAt);
         const v = handValue(cards);
         return (
           <motion.div
@@ -366,6 +448,7 @@ function StopMarkers({ snap, lag, step, cardW: SHARED_W }: { snap: PublicSnapsho
                 k === "busted" ? `${t("BUST")} ${v.total}` :
                 k === "blackjack" ? t("BJ") :
                 k === "doubled" ? `${t("DOUBLE")} ${v.total}` :
+                k === "waiting" ? "⏳" :
                 `${t("STAND")} ${v.total}`;
               const tone =
                 hidden ? "bg-white/15 text-white" :
@@ -400,7 +483,7 @@ function PhaseLine({ snap, lag, showSub = true }: { snap: PublicSnapshot; lag: L
   let title: string = t(`phase_${snap.phase}` as TKey);
   let sub: string | null = null;
   let cls = "text-white";
-  const active = snap.players.filter((p) => p.hand?.status === "active");
+  const active = snap.players.filter((p) => activeHand(p));
   const inHand = snap.players.filter((p) => p.hand);
   switch (snap.phase) {
     case "dealing":
@@ -413,9 +496,15 @@ function PhaseLine({ snap, lag, showSub = true }: { snap: PublicSnapshot; lag: L
       break;
     case "drawing": {
       const revealed = snap.lastStep?.revealed ?? {};
-      const hits = Object.values(revealed).filter((d) => d !== "stand").length;
+      const hits = Object.values(revealed).filter((d) => d === "hit" || d === "double").length;
       const stands = Object.values(revealed).filter((d) => d === "stand").length;
-      title = snap.lastStep?.card ? `${t("hitters", { n: hits })} · ${t("standers", { n: stands })}` : t("everyoneStands");
+      const splits = Object.values(revealed).filter((d) => d === "split").length;
+      const drew = (snap.lastStep?.rowCards?.length ?? (snap.lastStep?.card ? 1 : 0)) > 0;
+      title = snap.lastStep?.secondHands && !hits && !splits
+        ? t("secondHands")
+        : drew
+          ? [splits ? t("splitters", { n: splits }) : null, hits ? t("hitters", { n: hits }) : null, t("standers", { n: stands })].filter(Boolean).join(" · ")
+          : t("everyoneStands");
       cls = "text-white";
       break;
     }
@@ -437,7 +526,7 @@ function PhaseLine({ snap, lag, showSub = true }: { snap: PublicSnapshot; lag: L
       break;
     }
     case "payout": {
-      const winners = inHand.filter((p) => isWin(p.hand?.outcome)).length;
+      const winners = inHand.filter((p) => isWin(roundOutcome(p))).length;
       title = t("winnersOf", { n: winners, m: inHand.length });
       cls = winners > 0 ? "text-win" : "text-lose";
       break;
@@ -598,7 +687,7 @@ function RightPanel({ snap, offset, lag }: { snap: PublicSnapshot; offset: numbe
   useNow(100);
   const left = timeLeft(snap, offset);
   const seated = snap.players.filter((p) => p.seat !== null);
-  const active = snap.players.filter((p) => p.hand?.status === "active");
+  const active = snap.players.filter((p) => activeHand(p));
   const inHand = snap.players.filter((p) => p.hand);
   // Busts count only once the card has turned.
   const alive = lag.pending ? inHand.length - inHand.filter((p) => p.hand!.stopAt <= lag.shared && p.hand!.status === "busted").length : inHand.filter((p) => p.hand!.status !== "busted").length;
@@ -612,12 +701,13 @@ function RightPanel({ snap, offset, lag }: { snap: PublicSnapshot; offset: numbe
     m = seated.length;
     caption = m > 0 && n === m ? `✓ ${t("allBetsIn")}` : t("lockedIn", { n, m });
   } else if (snap.phase === "deciding") {
-    n = active.filter((p) => p.hand!.locked).length;
+    n = active.filter((p) => activeHand(p)!.locked).length;
     m = active.length;
     caption = m > 0 && n === m ? `✓ ${t("allDecided")}` : t("lockedIn", { n, m });
   }
   const sharedShown = snap.shared.slice(0, lag.shared);
-  const risk = snap.phase === "deciding" && active.length ? bustProbability(sharedShown) : null;
+  // Bust risk is about the shared row; after a split each hand has its own, so it is left out.
+  const risk = snap.phase === "deciding" && active.length && !snap.splitRows ? bustProbability(sharedShown) : null;
   const revealed = snap.phase === "drawing" ? snap.lastStep?.revealed ?? {} : null;
 
   return (
@@ -642,8 +732,11 @@ function RightPanel({ snap, offset, lag }: { snap: PublicSnapshot; offset: numbe
           </>
         ) : revealed ? (
           <div className="flex w-full justify-around">
-            <Tally label={t("HIT")} tone="text-[#38bdf8]" ids={Object.keys(revealed).filter((id) => revealed[id] !== "stand")} snap={snap} />
+            <Tally label={t("HIT")} tone="text-[#38bdf8]" ids={Object.keys(revealed).filter((id) => revealed[id] === "hit" || revealed[id] === "double")} snap={snap} />
             <Tally label={t("STAND")} tone="text-white" ids={Object.keys(revealed).filter((id) => revealed[id] === "stand")} snap={snap} />
+            {Object.values(revealed).includes("split") && (
+              <Tally label={t("SPLIT")} tone="text-gold" ids={Object.keys(revealed).filter((id) => revealed[id] === "split")} snap={snap} />
+            )}
           </div>
         ) : snap.phase === "payout" ? (
           <PayoutTally snap={snap} />
@@ -716,9 +809,9 @@ function Tally({ label, tone, ids, snap }: { label: string; tone: string; ids: s
 
 function PayoutTally({ snap }: { snap: PublicSnapshot }) {
   const t = useT();
-  const inHand = snap.players.filter((p) => p.hand?.outcome);
-  const w = inHand.filter((p) => isWin(p.hand!.outcome)).length;
-  const pu = inHand.filter((p) => p.hand!.outcome === "push").length;
+  const inHand = snap.players.filter((p) => roundOutcome(p));
+  const w = inHand.filter((p) => isWin(roundOutcome(p))).length;
+  const pu = inHand.filter((p) => roundOutcome(p) === "push").length;
   const l = inHand.length - w - pu;
   return (
     <div className="flex w-full justify-around">
@@ -800,11 +893,14 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
   const lang = useLang((s) => s.lang);
   const h = p.hand;
   const badge = tileBadge(p, snap, lag);
-  const outcome = snap.phase === "payout" ? h?.outcome : null;
+  const outcome = snap.phase === "payout" ? roundOutcome(p) : null;
   const won = isWin(outcome);
   const lost = outcome === "lose";
-  const stake = h ? h.bet : p.bet;
-  const totalHidden = h ? h.stopAt > lag.shared : true;
+  const stake = h ? h.bet + (p.hand2?.bet ?? 0) : p.bet;
+  const revealedOn = (x: NonNullable<typeof h>) => x.stopAt <= (x.row === 0 ? lag.shared : lag.rows[x.row - 1]!);
+  const totalHidden = h ? !revealedOn(h) : true;
+  // After a split the bubble shows both totals.
+  const totalText = h && p.hand2 ? [h, p.hand2].map((x) => (x.status === "busted" ? "✕" : revealedOn(x) ? String(x.total) : "?")).join(" · ") : h ? String(h.total) : "";
   const ring = badge ? TONE_RING[badge.tone] : undefined;
   const frame = won
     ? outcome === "blackjack"
@@ -862,9 +958,9 @@ function SeatTile({ p, snap, lag, w, floaters }: { p: PublicPlayer; snap: Public
         <div className={badge?.pulse ? "rounded-full pulse-ring" : ""} style={{ filter: p.connected ? undefined : "grayscale(1) brightness(.6)" }}>
           <Avatar emoji={p.avatar} seed={p.id} size={Math.min(72, w * 0.5)} ring={ring} />
         </div>
-        {h && h.status !== "busted" && !totalHidden && (
-          <span className="tabular absolute -right-4 -top-1 rounded-full bg-white px-2 py-px font-display text-[15px] font-bold text-ink shadow">
-            {h.total}
+        {h && (p.hand2 || (h.status !== "busted" && !totalHidden)) && (
+          <span className="tabular absolute -right-4 -top-1 whitespace-nowrap rounded-full bg-white px-2 py-px font-display text-[15px] font-bold text-ink shadow">
+            {totalText}
           </span>
         )}
         {!p.connected && <span className="absolute -right-1 bottom-0 text-sm">📵</span>}
@@ -935,9 +1031,38 @@ function Announcer({ snap, lag, jolt }: { snap: PublicSnapshot; lag: Lag; jolt: 
     () =>
       onRoomEvent((e) => {
         if (e.k === "deal") say({ text: t("noMoreBets"), tone: "white", size: 110 });
+        if (e.k === "step" && e.splitters?.length) {
+          sfx.cheer(0.5, 0.1);
+          say({ text: e.splitters.length > 1 ? `${t("SPLIT")} ×${e.splitters.length}` : `${t("SPLIT")}!`, tone: "gold", size: 150 });
+          jolt("rgba(124,92,255,.3)");
+        } else if (e.k === "step" && e.secondHands) {
+          say({ text: t("secondHands"), tone: "white", size: 110 });
+        }
       }),
-    [t],
+    [t, jolt],
   );
+
+  // A card turned on a split hand.
+  const prevRows = useRef(lag.rows);
+  useEffect(() => {
+    const s = snapRef.current;
+    const before = prevRows.current;
+    prevRows.current = lag.rows;
+    ([1, 2] as const).forEach((row) => {
+      const n = lag.rows[row - 1]!;
+      if (n <= before[row - 1]! || n < 2) return;
+      const v = handValue(rowOf(s, row).slice(0, n));
+      if (v.bust) {
+        sfx.bust();
+        say({ text: t("BUST"), tone: "lose", size: 150 });
+        jolt("rgba(251,113,133,.12)");
+      } else if (v.total === 21) {
+        sfx.win();
+        say({ text: "21!", tone: "gold", size: 170 });
+        jolt("rgba(245,196,81,.3)");
+      }
+    });
+  }, [lag.rows, t, jolt]);
 
   // Shared card turned.
   const prevShared = useRef(lag.shared);
@@ -1208,7 +1333,7 @@ function useArenaSounds(snap: PublicSnapshot) {
     snap.phase === "betting"
       ? snap.players.filter((p) => p.betLocked).length
       : snap.phase === "deciding"
-        ? snap.players.filter((p) => p.hand?.locked).length
+        ? snap.players.filter((p) => activeHand(p)?.locked).length
         : 0;
   const prev = useRef(locked);
   useEffect(() => {

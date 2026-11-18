@@ -8,6 +8,8 @@ import {
   resolveStep,
   playDealer,
   allDecided,
+  canSplit,
+  canDouble,
   seededRng,
   createShoe,
   buildDecks,
@@ -278,5 +280,75 @@ describe("simulation", () => {
     // Simplified strategy without splits: house edge should land roughly between 0% and 3%.
     expect(edge).toBeGreaterThan(-0.01);
     expect(edge).toBeLessThan(0.03);
+  });
+});
+
+describe("split", () => {
+  const ids = ["a", "b", "c"];
+  const bets = ids.map((playerId) => ({ playerId, bet: 10 }));
+
+  it("only on the first decision, on a pair of the same rank, when allowed", () => {
+    expect(canSplit(startRound(bets, riggedShoe(["8S", "6H", "8D", "10C"]), rng, R), "a")).toBe(true);
+    // 10 and K are worth the same but are not a pair.
+    expect(canSplit(startRound(bets, riggedShoe(["10S", "6H", "KD", "10C"]), rng, R), "a")).toBe(false);
+    expect(canSplit(startRound(bets, riggedShoe(["8S", "6H", "8D", "10C"]), rng, { ...R, allowSplit: false }), "a")).toBe(false);
+    const s = startRound(bets, riggedShoe(["3S", "6H", "3D", "10C", "2C"]), rng, R);
+    for (const id of ids) submitDecision(s, id, "hit");
+    resolveStep(s, riggedShoe([]), rng);
+    expect(canSplit(s, "a")).toBe(false);
+    expect(submitDecision(s, "a", "split")).toBe(false);
+  });
+
+  it("splitters share two new rows; the second hands play after every first hand", () => {
+    // Shared 8,8 · dealer 6 up, 10 hole.
+    const s = startRound(bets, riggedShoe(["8S", "6H", "8D", "10C"]), rng, R);
+    submitDecision(s, "a", "split");
+    submitDecision(s, "b", "stand");
+    submitDecision(s, "c", "hit");
+    // Draw order: shared row (c's hit), then the first split row (a's second card).
+    const shoe = riggedShoe(["3C", "3D", "10S", "9H", "KS"]);
+    const r1 = resolveStep(s, shoe, rng);
+    expect(r1.splitters).toEqual(["a"]);
+    expect(r1.rowCards).toEqual([{ row: 0, card: "3C" }, { row: 1, card: "3D" }]);
+    expect(s.shared).toEqual(["8S", "8D", "3C"]);
+    expect(s.splitRows).toEqual([["8S", "3D"], ["8D"]]);
+    expect(s.hands.a).toMatchObject({ row: 1, stopAt: 2, status: "active", fresh: true });
+    expect(s.seconds.a).toMatchObject({ row: 2, stopAt: 1, status: "waiting", bet: 10 });
+    // Double after split is allowed on the fresh two-card hand.
+    expect(canDouble(s, "a")).toBe(true);
+    submitDecision(s, "a", "double");
+    submitDecision(s, "c", "stand");
+    const r2 = resolveStep(s, shoe, rng);
+    expect(s.hands.a).toMatchObject({ status: "doubled", bet: 20, stopAt: 3 });
+    // Every first hand is done: the second hand gets its second card and plays.
+    expect(r2.secondHands).toBe(true);
+    expect(s.splitRows![1]).toEqual(["8D", "9H"]);
+    expect(s.seconds.a).toMatchObject({ status: "active", stopAt: 2 });
+    expect(s.phase).toBe("deciding");
+    submitDecision(s, "a", "stand");
+    resolveStep(s, shoe, rng);
+    expect(s.phase).toBe("dealer");
+    playDealer(s, shoe, rng, R); // dealer 16 + K = bust
+    expect(s.hands.a).toMatchObject({ outcome: "win", returned: 40 });
+    expect(s.seconds.a).toMatchObject({ outcome: "win", returned: 20 });
+    expect(s.hands.b!.outcome).toBe("win");
+  });
+
+  it("split aces get one card each, and 21 is not a blackjack", () => {
+    const s = startRound(bets, riggedShoe(["AS", "6H", "AD", "10C"]), rng, R);
+    for (const id of ids) submitDecision(s, id, "split");
+    // Everyone split: the shared row stays at two cards.
+    const shoe = riggedShoe(["KD", "9C", "2C"]);
+    resolveStep(s, shoe, rng);
+    expect(s.shared).toEqual(["AS", "AD"]);
+    expect(s.splitRows).toEqual([["AS", "KD"], ["AD", "9C"]]);
+    for (const id of ids) {
+      expect(s.hands[id]!.status).toBe("stood");
+      expect(s.seconds[id]!.status).toBe("stood");
+    }
+    expect(s.phase).toBe("dealer");
+    playDealer(s, shoe, rng, R); // 16 + 2 = 18
+    expect(s.hands.a).toMatchObject({ outcome: "win", returned: 20 }); // 21 pays 1:1
+    expect(s.seconds.a).toMatchObject({ outcome: "win", returned: 20 }); // 20 beats 18
   });
 });
