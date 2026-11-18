@@ -14,6 +14,7 @@ import { useStageWidth } from "./Stage";
 import { StreakMeter } from "../components/StreakMeter";
 import { ChipFlights, GoldDust, LeaderWatch, Marquee, stripGeometry, useMood, type Lag } from "./ArenaFx";
 import { REVEAL } from "../lib/pace";
+import { useCardSize } from "../lib/cardSize";
 
 /**
  * "Big screen" view: the stadium-style display at the front of the room.
@@ -24,8 +25,17 @@ const TOP_H = 84;
 const STRIP_H = 236;
 const MAIN_H = 1080 - TOP_H - STRIP_H;
 const SIDE_W = 360;
-const DEALER_W = 150;
-const SHARED_W = 176;
+
+/**
+ * Center layout per "Card size" setting. The center is 760 px tall, so bigger cards take space from the
+ * gaps: dealer row, phase line, shared row, then ~108 px of player markers under the shared cards.
+ * Extra large also drops the phase line's small subtitle to make room.
+ */
+const CENTER = {
+  normal: { dealerW: 150, sharedW: 176, gap: 22, phaseH: 126, jumbo: false, sub: true },
+  large: { dealerW: 165, sharedW: 205, gap: 14, phaseH: 96, jumbo: true, sub: true },
+  xl: { dealerW: 172, sharedW: 228, gap: 10, phaseH: 70, jumbo: true, sub: false },
+} as const;
 
 
 /**
@@ -232,6 +242,11 @@ function TotalBadge({ cards, final, label }: { cards: Card[]; final: boolean; la
 
 function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: number }) {
   const t = useT();
+  const L = CENTER[useCardSize((s) => s.size)];
+  const { dealerW: DEALER_W, sharedW: SHARED_W } = L;
+  const dealerTop = 14;
+  const phaseTop = dealerTop + DEALER_W * 1.4 + L.gap;
+  const sharedTop = phaseTop + L.phaseH;
   const rowMax = width - 2 * 200;
   const dealing = snap.phase === "dealing";
 
@@ -260,7 +275,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
   return (
     <div className="relative flex-1">
       {/* dealer */}
-      <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-10" style={{ top: 14 }}>
+      <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-10" style={{ top: dealerTop }}>
         <div className="w-[150px]">
           <TotalBadge cards={dealerVisible} final={dealerDone} label={t("dealer")} />
         </div>
@@ -270,6 +285,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
               <PlayingCard
                 card={c}
                 width={DEALER_W}
+                jumbo={L.jumbo}
                 dealFrom={{ x: 520 - i * dStep, y: -260 }}
                 delay={dealing ? (i === 0 ? PACE.deal[1] : PACE.deal[3]) : 0}
                 flipDelay={dealing ? PACE.dealFlip : PACE.dealerFlip}
@@ -281,12 +297,12 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
       </div>
 
       {/* phase line */}
-      <div className="absolute left-0 right-0 flex justify-center" style={{ top: 246 }}>
-        <PhaseLine snap={snap} lag={lag} />
+      <div className="absolute left-0 right-0 flex justify-center" style={{ top: phaseTop }}>
+        <PhaseLine snap={snap} lag={lag} showSub={L.sub} />
       </div>
 
       {/* shared hand */}
-      <div className="absolute left-1/2 flex -translate-x-1/2 items-start gap-10" style={{ top: 372 }}>
+      <div className="absolute left-1/2 flex -translate-x-1/2 items-start gap-10" style={{ top: sharedTop }}>
         <div className="w-[150px] pt-10">
           <TotalBadge cards={sharedShown} final={!anyActive} label={t("sharedRow")} />
         </div>
@@ -296,6 +312,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
               <PlayingCard
                 card={c}
                 width={SHARED_W}
+                jumbo={L.jumbo}
                 dealFrom={{ x: 520 - i * sStep, y: -620 }}
                 delay={dealing ? (i === 0 ? PACE.deal[0] : i === 1 ? PACE.deal[2] : 0) : PACE.drawDelay}
                 flipDelay={dealing ? PACE.dealFlip : PACE.drawFlip}
@@ -303,7 +320,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
               />
             </div>
           ))}
-          <StopMarkers snap={snap} lag={lag} step={sStep} />
+          <StopMarkers snap={snap} lag={lag} step={sStep} cardW={SHARED_W} />
         </div>
         <div className="w-[150px]" />
       </div>
@@ -313,7 +330,7 @@ function Center({ snap, lag, width }: { snap: PublicSnapshot; lag: Lag; width: n
 
 type Kind = "active" | "stood" | "doubled" | "busted" | "blackjack";
 
-function StopMarkers({ snap, lag, step }: { snap: PublicSnapshot; lag: Lag; step: number }) {
+function StopMarkers({ snap, lag, step, cardW: SHARED_W }: { snap: PublicSnapshot; lag: Lag; step: number; cardW: number }) {
   const t = useT();
   const groups = new Map<number, Map<Kind, PublicPlayer[]>>();
   for (const p of snap.players) {
@@ -378,7 +395,7 @@ function StopMarkers({ snap, lag, step }: { snap: PublicSnapshot; lag: Lag; step
   );
 }
 
-function PhaseLine({ snap, lag }: { snap: PublicSnapshot; lag: Lag }) {
+function PhaseLine({ snap, lag, showSub = true }: { snap: PublicSnapshot; lag: Lag; showSub?: boolean }) {
   const t = useT();
   let title: string = t(`phase_${snap.phase}` as TKey);
   let sub: string | null = null;
@@ -444,7 +461,7 @@ function PhaseLine({ snap, lag }: { snap: PublicSnapshot; lag: Lag }) {
         className="flex flex-col items-center"
       >
         <span className={`whitespace-nowrap font-display text-[56px] font-bold leading-none ${cls}`}>{title}</span>
-        {sub && <span className="mt-2 text-lg font-semibold text-white/45">{sub}</span>}
+        {sub && showSub && <span className="mt-2 text-lg font-semibold text-white/45">{sub}</span>}
       </motion.div>
     </AnimatePresence>
   );

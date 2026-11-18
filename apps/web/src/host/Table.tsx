@@ -7,6 +7,7 @@ import { Avatar } from "../components/ui";
 import { useT, useLang, fmt } from "../lib/i18n";
 import { seatBadge, TONE_CLASSES, TONE_RING, totalLabel } from "../lib/view";
 import { StreakMeter } from "../components/StreakMeter";
+import { useCardSize } from "../lib/cardSize";
 
 export const TABLE_W = 1600;
 const CX = 800;
@@ -121,6 +122,7 @@ export function Shoe({ snap }: { snap: PublicSnapshot }) {
 }
 
 export function DealerHand({ snap }: { snap: PublicSnapshot }) {
+  const jumbo = useCardSize((c) => c.size) !== "normal";
   const t = useT();
   const cards = snap.dealer;
   const visible = cards.filter((c): c is Card => c !== null);
@@ -154,6 +156,7 @@ export function DealerHand({ snap }: { snap: PublicSnapshot }) {
             <PlayingCard
               card={c}
               width={DEALER_CARD_W}
+              jumbo={jumbo}
               dealFrom={{ x: SHOE_POS.x - CX - i * 84 + 40, y: SHOE_POS.y - DEALER_Y - 60 }}
               delay={snap.phase === "dealing" ? (i === 0 ? 0.25 : 0.75) : 0}
             />
@@ -170,6 +173,7 @@ interface StopGroup {
 }
 
 export function SharedRow({ snap }: { snap: PublicSnapshot }) {
+  const jumbo = useCardSize((c) => c.size) !== "normal";
   const n = snap.shared.length;
   if (n === 0) return null;
   const width = (n - 1) * SHARED_STEP + SHARED_CARD_W;
@@ -189,6 +193,7 @@ export function SharedRow({ snap }: { snap: PublicSnapshot }) {
           <PlayingCard
             card={c}
             width={SHARED_CARD_W}
+            jumbo={jumbo}
             dealFrom={{ x: SHOE_POS.x - (left + i * SHARED_STEP), y: SHOE_POS.y - SHARED_Y - 80 }}
             delay={snap.phase === "dealing" ? (i === 0 ? 0 : i === 1 ? 0.5 : 0) : 0.05}
             glow={i === newCard ? "gold" : null}

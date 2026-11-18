@@ -81,9 +81,10 @@ Check that it works: opening the game server address should show `{"ok":true,"se
 | `→` / `N` / `PageDown` | next beat (skips the timer in auto mode) |
 | `M` | switch between Auto and Step by step |
 | `V` | switch between the **Big screen** view (default) and the **Table** view |
+| `C` | card size on the TV: Normal → Large → Extra large (bigger cards and corner numbers for guests far from the screen; also in Settings) |
 | `B` | start a 🦌 **Reindeer Race** bonus (during betting, or right after the current payout) |
 | `P` | players: top up chips (+500 / +1000), kick, ban |
-| `S` | settings (decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
+| `S` | settings (card size, decks, S17/H17, 3:2 vs 6:5, min/max bet, starting chips, seats, timers) |
 | `F` | fullscreen |
 | `Esc` | close a panel |
 

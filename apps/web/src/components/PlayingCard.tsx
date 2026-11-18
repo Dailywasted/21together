@@ -17,7 +17,16 @@ function SuitGlyph({ suit, x, y, size, color }: { suit: Suit; x: number; y: numb
   );
 }
 
-const FaceSvg = memo(function FaceSvg({ card }: { card: Card }) {
+/**
+ * Corner index sizes. "Jumbo" is the casino trick for reading cards from across the room:
+ * a much bigger rank and suit in the corners (the part still visible when cards overlap).
+ */
+const INDEX = {
+  normal: { x: 16, y: 50, font: 46, font10: 40, spacing10: -4, suitX: 17, suitY: 60, suit: 28 },
+  jumbo: { x: 13, y: 66, font: 66, font10: 56, spacing10: -6, suitX: 14, suitY: 76, suit: 38 },
+};
+
+const FaceSvg = memo(function FaceSvg({ card, jumbo = false }: { card: Card; jumbo?: boolean }) {
   const rank = card.slice(0, -1);
   const suit = card.slice(-1) as Suit;
   const color = isRed(suit) ? "#d9343b" : "#111418";
@@ -25,6 +34,23 @@ const FaceSvg = memo(function FaceSvg({ card }: { card: Card }) {
   const isFace = rank === "J" || rank === "Q" || rank === "K";
   const narrowRank = rank === "10";
   const gid = `g${card}`;
+  const ix = jumbo ? INDEX.jumbo : INDEX.normal;
+  const corner = (
+    <>
+      <text
+        x={ix.x}
+        y={ix.y}
+        fontFamily="Space Grotesk, Inter, sans-serif"
+        fontWeight="700"
+        fontSize={narrowRank ? ix.font10 : ix.font}
+        letterSpacing={narrowRank ? ix.spacing10 : 0}
+        fill={color}
+      >
+        {rank}
+      </text>
+      <SuitGlyph suit={suit} x={ix.suitX} y={ix.suitY} size={ix.suit} color={color} />
+    </>
+  );
   return (
     <svg viewBox="0 0 200 280" width="100%" height="100%" aria-label={card} role="img">
       <defs>
@@ -35,39 +61,19 @@ const FaceSvg = memo(function FaceSvg({ card }: { card: Card }) {
       </defs>
       <rect x="1" y="1" width="198" height="278" rx="16" fill={`url(#${gid})`} stroke="rgba(0,0,0,0.12)" strokeWidth="2" />
       {/* corners */}
-      <g>
-        <text
-          x="16"
-          y="50"
-          fontFamily="Space Grotesk, Inter, sans-serif"
-          fontWeight="700"
-          fontSize={narrowRank ? 40 : 46}
-          letterSpacing={narrowRank ? -4 : 0}
-          fill={color}
-        >
-          {rank}
-        </text>
-        <SuitGlyph suit={suit} x={17} y={60} size={28} color={color} />
-      </g>
-      <g transform="rotate(180 100 140)">
-        <text
-          x="16"
-          y="50"
-          fontFamily="Space Grotesk, Inter, sans-serif"
-          fontWeight="700"
-          fontSize={narrowRank ? 40 : 46}
-          letterSpacing={narrowRank ? -4 : 0}
-          fill={color}
-        >
-          {rank}
-        </text>
-        <SuitGlyph suit={suit} x={17} y={60} size={28} color={color} />
-      </g>
+      <g>{corner}</g>
+      <g transform="rotate(180 100 140)">{corner}</g>
       {/* center */}
       {isFace ? (
         <g>
-          <rect x="44" y="62" width="112" height="156" rx="12" fill={tint} fillOpacity="0.07" stroke={tint} strokeOpacity="0.35" strokeWidth="2" />
-          <rect x="52" y="70" width="96" height="140" rx="8" fill="none" stroke={tint} strokeOpacity="0.18" strokeWidth="1.5" />
+          {jumbo ? (
+            <rect x="60" y="84" width="80" height="128" rx="10" fill={tint} fillOpacity="0.07" stroke={tint} strokeOpacity="0.35" strokeWidth="2" />
+          ) : (
+            <>
+              <rect x="44" y="62" width="112" height="156" rx="12" fill={tint} fillOpacity="0.07" stroke={tint} strokeOpacity="0.35" strokeWidth="2" />
+              <rect x="52" y="70" width="96" height="140" rx="8" fill="none" stroke={tint} strokeOpacity="0.18" strokeWidth="1.5" />
+            </>
+          )}
           <text
             x="100"
             y="160"
@@ -83,8 +89,8 @@ const FaceSvg = memo(function FaceSvg({ card }: { card: Card }) {
         </g>
       ) : rank === "A" ? (
         <g>
-          <circle cx="100" cy="140" r="62" fill="none" stroke={color} strokeOpacity="0.15" strokeWidth="2" />
-          <SuitGlyph suit={suit} x={55} y={95} size={90} color={color} />
+          <circle cx="100" cy="140" r={jumbo ? 50 : 62} fill="none" stroke={color} strokeOpacity="0.15" strokeWidth="2" />
+          {jumbo ? <SuitGlyph suit={suit} x={63} y={103} size={74} color={color} /> : <SuitGlyph suit={suit} x={55} y={95} size={90} color={color} />}
         </g>
       ) : (
         <SuitGlyph suit={suit} x={62} y={102} size={76} color={color} />
@@ -128,9 +134,11 @@ interface Props {
   className?: string;
   /** Extra wait before the face is revealed (suspense). */
   flipDelay?: number;
+  /** Big corner index, readable from across the room (TV "Card size" setting). */
+  jumbo?: boolean;
 }
 
-export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, className, flipDelay = 0 }: Props) {
+export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, className, flipDelay = 0, jumbo = false }: Props) {
   const height = width * 1.4;
   const faceUp = card !== null;
   const shadow =
@@ -156,7 +164,7 @@ export function PlayingCard({ card, width, dealFrom, delay = 0, dim, glow, class
         transition={{ type: "spring", stiffness: 140, damping: 18, delay: delay + (dealFrom ? 0.25 : 0) + flipDelay }}
       >
         <div style={{ position: "absolute", inset: 0, backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}>
-          {card && <FaceSvg card={card} />}
+          {card && <FaceSvg card={card} jumbo={jumbo} />}
         </div>
         <div
           style={{

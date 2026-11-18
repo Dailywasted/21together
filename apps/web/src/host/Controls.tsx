@@ -7,6 +7,7 @@ import { useT, useLang, fmt, type TKey } from "../lib/i18n";
 import { setSoundEnabled, soundEnabled } from "../lib/sound";
 import { musicEnabled, setMusicEnabled } from "../lib/music";
 import { LangToggle } from "../components/LangToggle";
+import { CARD_SIZES, useCardSize } from "../lib/cardSize";
 import type { HostView } from "./HostPage";
 
 type Modal = null | "players" | "settings" | "end";
@@ -73,6 +74,7 @@ export function HostControls({
         return;
       } else if (k === "m") cmd({ c: "rules", rules: { manual: !snap.rules.manual } });
       else if (k === "v") setView(view === "arena" ? "table" : "arena");
+      else if (k === "c") useCardSize.getState().cycle();
       else if (k === "b") cmd({ c: "bonus" });
       else if (k === "p") setModal("players");
       else if (k === "s") setModal("settings");
@@ -306,12 +308,39 @@ const NUM_FIELDS: { key: keyof Rules; label: TKey; min: number; max: number; ste
   { key: "decisionSeconds", label: "rule_decideTime", min: 4, max: 30 },
 ];
 
+/** TV-only display setting: applies instantly (no Save needed) and is remembered by this browser. */
+function CardSizePicker() {
+  const t = useT();
+  const { size, setSize } = useCardSize();
+  return (
+    <div className="mb-3 rounded-2xl bg-white/5 p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm font-bold">🃏 {t("cardSize")}</span>
+        <span className="text-xs text-white/40">C</span>
+      </div>
+      <div className="mt-1 text-xs text-white/45">{t("cardSizeHint")}</div>
+      <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-black/30 p-1">
+        {CARD_SIZES.map((s) => (
+          <button
+            key={s}
+            onClick={() => setSize(s)}
+            className={`btn-press rounded-lg py-2 font-bold ${size === s ? "bg-gold text-ink" : "text-white/60 hover:text-white"}`}
+          >
+            {t(`size_${s}` as TKey)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsPanel({ rules, onSave }: { rules: Rules; onSave: (r: Partial<Rules>) => void }) {
   const t = useT();
   const [draft, setDraft] = useState<Rules>(rules);
   return (
     <div>
       <h2 className="mb-5 font-display text-3xl font-bold">{t("settings")}</h2>
+      <CardSizePicker />
       <div className="grid grid-cols-2 gap-3">
         {NUM_FIELDS.map((f) => (
           <label key={f.key} className="flex flex-col gap-1 rounded-2xl bg-white/5 p-3">
