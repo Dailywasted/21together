@@ -1,3 +1,4 @@
+import { diag } from "./store";
 import { load, save } from "./storage";
 
 /** Tiny synthesized sound kit (WebAudio) — no audio files, no licensing. */
@@ -10,6 +11,8 @@ function ac(): AudioContext | null {
   try {
     if (!ctx) {
       ctx = new AudioContext();
+      const c = ctx;
+      c.addEventListener("statechange", () => diag("audio", `${c.state} · ${c.sampleRate}Hz`));
       master = ctx.createGain();
       master.gain.value = 0.5;
       master.connect(ctx.destination);

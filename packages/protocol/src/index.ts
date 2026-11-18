@@ -13,6 +13,8 @@ export const ClientMsg = z.discriminatedUnion("t", [
   z.object({ t: z.literal("leave") }),
   z.object({ t: z.literal("bet"), amount: z.number().int().min(0).max(1_000_000), lock: z.boolean() }),
   z.object({ t: z.literal("decide"), action: z.enum(["hit", "stand", "double", "split"]) }),
+  /** Diagnostics from a screen (shown in the room log): what it showed, what was tapped, errors, reloads. */
+  z.object({ t: z.literal("diag"), kind: z.string().max(40), detail: z.string().max(300).optional() }),
   z.object({ t: z.literal("react"), emoji: z.string().max(8) }),
   z.object({ t: z.literal("pick"), runner: z.number().int().min(0).max(5) }),
   z.object({ t: z.literal("ping"), at: z.number() }),

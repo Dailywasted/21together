@@ -6,7 +6,7 @@ import { PlayingCard } from "../components/PlayingCard";
 import { Chip } from "../components/Chip";
 import { CountdownRing, useNow } from "../components/ui";
 import { useT, useLang, fmt } from "../lib/i18n";
-import { timeLeft, useGame } from "../lib/store";
+import { diag, timeLeft, useGame } from "../lib/store";
 import { haptic, sfx } from "../lib/sound";
 import { activeHand, roundOutcome, rowOf, totalLabel } from "../lib/view";
 import { BonusPanel } from "./BonusPanel";
@@ -297,6 +297,7 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
   const pending = me.pending;
   const decide = (action: "hit" | "stand" | "double" | "split") => {
     haptic(action === "double" || action === "split" ? [20, 40, 20] : 18);
+    diag("tap", `${action} · round ${snap.roundNo} step ${snap.step} · ${Math.round(left / 100) / 10}s left`);
     sfx.lock();
     send({ t: "decide", action });
   };
@@ -306,6 +307,7 @@ function DecisionPanel({ snap, me, player }: { snap: PublicSnapshot; me: Private
     const key = `${snap.roundNo}:${snap.step}`;
     if (vibratedFor.current !== key) {
       vibratedFor.current = key;
+      diag("buttons shown", `round ${snap.roundNo} step ${snap.step}${me.playing ? ` · hand ${me.playing}` : ""} · ${Math.round(left / 100) / 10}s left`);
       haptic([30, 60, 30]);
     }
   }, [snap.roundNo, snap.step]);

@@ -102,6 +102,19 @@ Good to know:
 - Opening `/host/CODE` on a second screen shows a read-only spectator view.
 - Players with no chips left: use **Players → Top up everyone broke**.
 
+## If something weird happens
+
+Each table keeps a timeline of the last ~1000 events: every phase, every decision a phone sent (and whether it was accepted), players who **timed out** and were auto-stood, host keys and clicks, view switches, page reloads, connection drops, sound-device glitches and JavaScript errors.
+
+1. Note the **table code** (on the TV) and roughly **when** it happened.
+2. Ask Claude: *"Read the log for table ABCD around 9:15 PM and tell me what happened."* Or run it yourself:
+   ```bash
+   node scripts/log.mjs ABCD https://21together-api.<your-subdomain>.workers.dev 30   # last 30 minutes
+   ```
+   Lines starting with `>>` are the usual suspects: `TIMED OUT`, `REFUSED`, `page load reload`, `key`, `view`, `connection lost`, `audio`, `js error`.
+
+The same lines also go to the Cloudflare dashboard (Workers → `21together-api` → Logs). Anyone with the table code can read its log, like its history, so it holds no secrets: just names, cards and choices.
+
 ## How a round works
 
 `Betting (15s) → deal 2 shared cards + dealer → decision steps (10s each) → dealer → payout`

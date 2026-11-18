@@ -10,6 +10,7 @@ import {
   canDouble,
   canSplit,
   currentHand,
+  activeHands,
   handCards,
   rowCards,
   allHands,
@@ -182,6 +183,8 @@ export interface StepInfo {
   splitters?: string[];
   /** The second split hands started this step. */
   secondHands?: boolean;
+  /** Players who had not decided when the step resolved (auto-stand on timeout). */
+  timedOut?: string[];
 }
 
 export interface RoomState {
@@ -221,7 +224,7 @@ export type RoomEvent =
   | { k: "shuffle" }
   | { k: "deal" }
   | { k: "noBets" }
-  | { k: "step"; card: Card | null; takers: string[]; revealed: Record<string, Decision>; rowCards?: { row: HandRow; card: Card }[]; splitters?: string[]; secondHands?: boolean }
+  | { k: "step"; card: Card | null; takers: string[]; revealed: Record<string, Decision>; rowCards?: { row: HandRow; card: Card }[]; splitters?: string[]; secondHands?: boolean; timedOut?: string[] }
   | { k: "dealerCard"; card: Card; index: number }
   | { k: "payout"; results: RoundResult[] }
   | { k: "achievement"; playerId: string; name: string; code: AchievementCode }
@@ -535,6 +538,8 @@ export class RoomCore {
       if (h) before[pid] = handValue(handCards(r, h));
       stakeBefore[pid] = playerStake(r, pid);
     }
+    // Undecided players stand: remember who, for the room log.
+    const timedOut = activeHands(r).filter((h) => h.pending === null).map((h) => h.playerId);
     const res = resolveStep(r, s.shoe, this.rng);
     for (const [pid, d] of Object.entries(res.revealed)) {
       const p = s.players[pid];
@@ -559,6 +564,7 @@ export class RoomCore {
       rowCards: res.rowCards,
       splitters: res.splitters,
       secondHands: res.secondHands,
+      timedOut,
     };
     s.lastStep = step;
     this.events.push({ k: "step", ...step });

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { RoomCore, RoomError, type RoomEvent } from "@21/engine";
 import { ClientMsg, ALLOWED_REACTIONS, type ServerMsg } from "@21/protocol";
 import type { Env } from "./env";
+import { RoomLog, type LogEntry } from "./roomLog";
 
 interface Attachment {
   role: "player" | "host" | "spectator" | null;
@@ -14,6 +15,7 @@ interface Attachment {
 
 const STATE_KEY = "room";
 const META_KEY = "meta";
+const LOG_KEY = "log";
 /** Rooms with no activity for this long are wiped by the alarm. */
 const ROOM_TTL_MS = 3 * 24 * 3600 * 1000;
 
@@ -25,17 +27,27 @@ interface Meta {
 export class GameRoom extends DurableObject<Env> {
   private room: RoomCore | null = null;
   private meta: Meta | null = null;
+  private log = new RoomLog(undefined, () => this.room?.state.code ?? "?");
+  private logSavedAt = 0;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
-      const [state, meta] = await Promise.all([
+      const [state, meta, log] = await Promise.all([
         ctx.storage.get<RoomCore["state"]>(STATE_KEY),
         ctx.storage.get<Meta>(META_KEY),
+        ctx.storage.get<LogEntry[]>(LOG_KEY),
       ]);
       if (state) this.room = new RoomCore(state);
       if (meta) this.meta = meta;
+      this.log = new RoomLog(log, () => this.room?.state.code ?? "?");
     });
+  }
+
+  /** Who a socket is, for the log. */
+  private who(att: Attachment): { src: string; who?: string } {
+    const name = att.playerId ? this.room?.state.players[att.playerId]?.name : undefined;
+    return { src: att.role === "host" ? "tv" : att.role ?? "?", who: name };
   }
 
   // ───────────── HTTP (internal, from the Worker) ─────────────
@@ -62,6 +74,10 @@ export class GameRoom extends DurableObject<Env> {
         players: Object.values(s.players).filter((p) => !p.left).length,
         seats: s.seats.length,
       });
+    }
+    if (url.pathname === "/log") {
+      const since = Number(url.searchParams.get("since") ?? 0) || 0;
+      return Response.json({ code: this.room?.state.code ?? null, now: Date.now(), entries: this.log.entries.filter((e) => e.at >= since) });
     }
     if (url.pathname === "/history") {
       if (!this.room) return Response.json({ rounds: [] });
@@ -131,6 +147,7 @@ export class GameRoom extends DurableObject<Env> {
           }
           ws.serializeAttachment(att);
           this.send(ws, { t: "welcome", role: att.role ?? "spectator", playerId: att.playerId, serverNow: now });
+          this.log.add({ at: now, ...this.who(att), kind: "connected", detail: att.playerId ? "back in seat" : undefined });
           break;
         }
         case "join": {
@@ -150,10 +167,23 @@ export class GameRoom extends DurableObject<Env> {
           if (!att.playerId) throw new RoomError("not_player");
           room.placeBet(att.playerId, msg.amount, msg.lock, now);
           break;
-        case "decide":
+        case "decide": {
           if (!att.playerId) throw new RoomError("not_player");
-          room.decide(att.playerId, msg.action, now);
+          const s = room.state;
+          const left = s.deadline !== null ? `${Math.round((s.deadline - now) / 100) / 10}s left` : "no timer";
+          try {
+            room.decide(att.playerId, msg.action, now);
+            this.log.add({ at: now, ...this.who(att), kind: "decide", detail: `${msg.action} · round ${s.roundNo} step ${s.round?.step ?? "?"} · ${left}` });
+          } catch (e) {
+            this.log.add({ at: now, ...this.who(att), kind: "decide REFUSED", detail: `${msg.action} · ${e instanceof RoomError ? e.code : "error"} · phase ${s.phase} · ${left}` });
+            throw e;
+          }
           break;
+        }
+        case "diag":
+          this.log.add({ at: now, ...this.who(att), kind: msg.kind, detail: msg.detail });
+          ws.serializeAttachment(att);
+          return;
         case "pick":
           if (!att.playerId) throw new RoomError("not_player");
           room.bonusPick(att.playerId, msg.runner, now);
@@ -169,6 +199,7 @@ export class GameRoom extends DurableObject<Env> {
         case "host": {
           if (att.role !== "host") throw new RoomError("not_host");
           const c = msg.cmd;
+          this.log.add({ at: now, src: "tv", kind: `host ${c.c}`, detail: c.c === "rules" ? JSON.stringify(c.rules) : "playerId" in c ? room.state.players[c.playerId]?.name : undefined });
           switch (c.c) {
             case "start": room.hostStart(now); break;
             case "pause": room.pause(now); break;
@@ -198,6 +229,7 @@ export class GameRoom extends DurableObject<Env> {
     } catch (e) {
       if (e instanceof RoomError) this.send(ws, { t: "error", code: e.code });
       else {
+        this.log.add({ at: now, ...this.who(att), kind: "SERVER ERROR", detail: String(e instanceof Error ? e.stack ?? e.message : e).slice(0, 300) });
         console.error("room error", e);
         this.send(ws, { t: "error", code: "server_error" });
       }
@@ -217,7 +249,11 @@ export class GameRoom extends DurableObject<Env> {
   private async onSocketGone(ws: WebSocket): Promise<void> {
     if (!this.room) return;
     const att = ws.deserializeAttachment() as Attachment | null;
-    if (!att?.playerId) return;
+    if (att?.role) this.log.add({ ...this.who(att), kind: "disconnected" });
+    if (!att?.playerId) {
+      if (att?.role) await this.ctx.storage.put(LOG_KEY, this.log.entries);
+      return;
+    }
     const stillOpen = this.ctx
       .getWebSockets()
       .some((o) => o !== ws && (o.deserializeAttachment() as Attachment | null)?.playerId === att.playerId);
@@ -248,6 +284,7 @@ export class GameRoom extends DurableObject<Env> {
     const room = this.room!;
     if (activity && this.meta) this.meta.lastActivity = now;
     const events = room.takeEvents();
+    this.log.fromRoom(room, events, now);
     // Finished rounds are not stored outside the room. To add all-time stats later, write these to Cloudflare D1.
     room.takeCompleted();
     await this.save();
@@ -256,7 +293,18 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private async save(): Promise<void> {
-    await this.ctx.storage.put({ [STATE_KEY]: this.room!.state, [META_KEY]: this.meta });
+    // The log is saved at most every 3s (it can be ~100 KB); losing a few seconds of it on eviction is fine.
+    const now = Date.now();
+    const saveLog = this.log.dirty && now - this.logSavedAt > 3000;
+    if (saveLog) {
+      this.log.dirty = false;
+      this.logSavedAt = now;
+    }
+    await this.ctx.storage.put(
+      saveLog
+        ? { [STATE_KEY]: this.room!.state, [META_KEY]: this.meta, [LOG_KEY]: this.log.entries }
+        : { [STATE_KEY]: this.room!.state, [META_KEY]: this.meta },
+    );
   }
 
   private async scheduleAlarm(): Promise<void> {

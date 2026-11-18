@@ -8,6 +8,7 @@ import { setSoundEnabled, soundEnabled } from "../lib/sound";
 import { musicEnabled, setMusicEnabled } from "../lib/music";
 import { LangToggle } from "../components/LangToggle";
 import { CARD_SIZES, useCardSize } from "../lib/cardSize";
+import { diag } from "../lib/store";
 import type { HostView } from "./HostPage";
 
 type Modal = null | "players" | "settings" | "end";
@@ -65,11 +66,13 @@ export function HostControls({
         e.preventDefault();
         if (snap.phase === "lobby" || snap.phase === "ended") cmd({ c: "start" });
         else if (snap.rules.manual && !snap.paused) {
+          diag("key", "Space (next)");
           cmd({ c: "skip" });
           return; // stepping through the round keeps the screen clean
         } else cmd({ c: snap.paused ? "resume" : "pause" });
       } else if (k === "n" || k === "arrowright" || k === "pagedown") {
         e.preventDefault();
+        diag("key", `${e.key} (skip)`);
         cmd({ c: "skip" });
         return;
       } else if (k === "m") cmd({ c: "rules", rules: { manual: !snap.rules.manual } });
@@ -81,6 +84,7 @@ export function HostControls({
       else if (k === "f") toggleFullscreen();
       else if (k === "escape") setModal(null);
       else return;
+      diag("key", e.key === " " ? "Space" : e.key);
       poke();
     };
     window.addEventListener("mousemove", onMove);

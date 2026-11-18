@@ -60,10 +60,10 @@ export default {
         return json({ error: "could_not_allocate" }, 503);
       }
 
-      const roomMatch = path.match(/^\/api\/rooms\/([A-Za-z]{4})(\/history)?$/);
+      const roomMatch = path.match(/^\/api\/rooms\/([A-Za-z]{4})(\/history|\/log)?$/);
       if (roomMatch && request.method === "GET") {
         const code = roomMatch[1]!.toUpperCase();
-        const sub = roomMatch[2] ? "/history" : "/info";
+        const sub = roomMatch[2] ?? "/info";
         const res = await stub(env, code).fetch(`https://room${sub}${url.search}`);
         const body = (await res.json()) as Record<string, unknown>;
         return json({ code, ...body });

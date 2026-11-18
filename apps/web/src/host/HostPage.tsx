@@ -11,7 +11,7 @@ import { HostControls } from "./Controls";
 import { Effects } from "./Effects";
 import { Arena } from "./Arena";
 import { BonusTeaser, RaceScreen } from "./Race";
-import { useGame } from "../lib/store";
+import { useGame, diag } from "../lib/store";
 import { getHostToken, load, save } from "../lib/storage";
 import { api } from "../lib/api";
 import { useT } from "../lib/i18n";
@@ -27,6 +27,7 @@ export default function HostPage({ code }: { code: string }) {
   const [missing, setMissing] = useState(false);
   const [view, setViewState] = useState<HostView>(() => (load<string>("21t:view", "arena") === "table" ? "table" : "arena"));
   const setView = (v: HostView) => {
+    diag("view", v);
     save("21t:view", v);
     setViewState(v);
   };

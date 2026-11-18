@@ -43,6 +43,22 @@ let retry = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 let wanted: { code: string; role: Role; hostToken?: string } | null = null;
+
+/**
+ * Sends a line to the room log (see GET /api/rooms/:code/log). Used to understand bugs after the fact:
+ * what a screen showed, what was tapped, reloads, errors. Queued (last 30) until the socket is open.
+ */
+const diagQueue: string[] = [];
+export function diag(kind: string, detail?: string): void {
+  const data = JSON.stringify({ t: "diag", kind: kind.slice(0, 40), detail: detail?.slice(0, 300) } satisfies ClientMsg);
+  if (ws && ws.readyState === WebSocket.OPEN && helloSent) ws.send(data);
+  else {
+    diagQueue.push(data);
+    if (diagQueue.length > 30) diagQueue.shift();
+  }
+}
+let helloSent = false;
+let closedAt = 0;
 let queue: string[] = [];
 
 /**
@@ -73,9 +89,13 @@ export const useGame = create<GameStore>((set, get) => {
     ws = sock;
     resetDelivery();
     sock.onopen = () => {
+      const tries = retry;
       retry = 0;
       set({ status: "open", notFound: false });
       sock.send(JSON.stringify({ t: "hello", role, deviceId: deviceId(), hostToken } satisfies ClientMsg));
+      helloSent = true;
+      if (tries > 0) diag("reconnected", `after ${tries} tries, ${Math.round((Date.now() - closedAt) / 100) / 10}s offline`);
+      for (const m of diagQueue.splice(0)) sock.send(m);
       for (const m of queue) sock.send(m);
       queue = [];
       if (pingTimer) clearInterval(pingTimer);
@@ -132,6 +152,9 @@ export const useGame = create<GameStore>((set, get) => {
     sock.onclose = (ev) => {
       if (ws !== sock) return;
       ws = null;
+      helloSent = false;
+      closedAt = Date.now();
+      diag("connection lost", `code ${ev.code}`);
       if (pingTimer) clearInterval(pingTimer);
       if (!wanted) {
         set({ status: "closed" });
